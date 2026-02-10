@@ -39,6 +39,7 @@ Then:
 
 - **If open sprints exist:** List them and ask the user which sprint to add the tasks to, or whether to create a new sprint.
 - **If no open sprints exist:** Ask the user for a new sprint name and a one-line sprint goal.
+- **If 10 open sprints already exist:** A new sprint cannot be created. The user must archive an existing sprint first, or add tasks to an existing open sprint.
 
 ## Step 4: Write all files
 
@@ -113,3 +114,5 @@ Append a row for each new task to the `## Tasks` table in the sprint's `index.md
 - All paths are relative within `.backlogmd/`.
 - Never overwrite existing features or tasks — only append.
 - Always confirm with the user before writing files.
+- Max 10 open sprints in `sprints/`. If the limit is reached, the user must archive a sprint or use an existing one.
+- The `.archive/` directory is read-only cold storage. Never modify its contents, only move items into it.
