@@ -1,4 +1,4 @@
-# Sprint: Landing Page v1
+# Feature: Landing Page v1
 
 - **Status:** open
 - **Goal:** Ship the initial public-facing landing page
