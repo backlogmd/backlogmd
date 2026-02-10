@@ -144,3 +144,6 @@ Directory: `.archive/`
 4. When all tasks in a feature are `done`, the feature may be archived. Archiving moves the feature folder to `.archive/features/` and moves any newly `done` roadmap entries to `.archive/backlog.md`.
 5. A task cannot move to `in-progress` unless all of its dependencies are `done`.
 6. Circular dependencies are not allowed.
+7. When an agent begins work on a task, it must update the task status to `in-progress` in both the task file and the feature's task table.
+8. When an agent completes a task, it must update the task status to `done` in both the task file and the feature's task table.
+9. When all tasks in a feature reach `done`, the feature's roadmap status in `backlog.md` must be updated to reflect the derived status.
