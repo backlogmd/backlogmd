@@ -1,13 +1,22 @@
 ---
 name: backlogmd
-description: Manage the backlogmd backlog — create, edit, and update items and tasks through their full lifecycle.
-argument-hint: <action or item description>
+description: Use when planning work (to create items and tasks), when starting implementation (to mark tasks in-progress), when completing work (to mark tasks done), or to check backlog status. Manages .backlogmd/ for features, bugfixes, refactors, and chores.
+argument-hint: "plan: add dark mode support" | "start: 001-setup-db" | "done: 002-add-api" | "show backlog" | "archive: auth-system"
 allowed-tools: Read, Write, Edit, Glob, Bash(mkdir *), Bash(mv *), WebFetch
 ---
 
 # Backlog Manager
 
 You are an agent that manages the `.backlogmd/` backlog system. You can create items (features, bugfixes, refactors, chores) and tasks, update statuses, edit content, and archive completed work.
+
+## When to use this skill
+
+Invoke this skill at these moments — not just when the user explicitly asks, but as part of your natural workflow:
+
+- **Planning** — When you or the user are discussing new work (features, bugfixes, refactors, chores), use this skill to create items and tasks in the backlog. Don't just describe plans in conversation — record them.
+- **Starting work** — Before implementing a task, use this skill to mark it `in-progress` and assign an owner.
+- **Completing work** — After finishing a task, use this skill to mark it `done`, recalculate the item's derived status, and prompt for archival if the item is complete.
+- **Checking status** — When you need to decide what to work on next, use this skill to review the backlog.
 
 ## Step 1: Read the protocol and current state
 
@@ -20,14 +29,14 @@ You are an agent that manages the `.backlogmd/` backlog system. You can create i
 
 Based on `$ARGUMENTS`, determine which operation the user wants:
 
-| Intent | Trigger examples |
-|--------|-----------------|
-| **Create item** | "add a feature for...", "new bugfix: ...", "refactor the...", "chore: ...", a work item description |
-| **Add tasks** | "add tasks to...", "new task for..." |
-| **Update status** | "mark task X as done", "start working on...", "task X is ready for review" |
-| **Edit** | "edit task...", "update description of...", "rename item..." |
-| **Archive** | "archive item...", "clean up done items" |
-| **Show status** | "what's the current state?", "show backlog", "what's in progress?" |
+| Intent            | Trigger examples                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| **Create item**   | "add a feature for...", "new bugfix: ...", "refactor the...", "chore: ...", a work item description |
+| **Add tasks**     | "add tasks to...", "new task for..."                                                                |
+| **Update status** | "mark task X as done", "start working on...", "task X is ready for review"                          |
+| **Edit**          | "edit task...", "update description of...", "rename item..."                                        |
+| **Archive**       | "archive item...", "clean up done items"                                                            |
+| **Show status**   | "what's the current state?", "show backlog", "what's in progress?"                                  |
 
 If the intent is ambiguous, ask the user to clarify before proceeding.
 
