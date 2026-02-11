@@ -1,7 +1,7 @@
 ---
 name: backlogmd
 description: Use when planning work (to create items and tasks), when starting implementation (to mark tasks in-progress), when completing work (to mark tasks done), or to check backlog status. Manages .backlogmd/ for features, bugfixes, refactors, and chores.
-argument-hint: plan/start/done/show/archive <item or task>
+argument-hint: init/plan/start/done/show/archive/check <item or task>
 allowed-tools: Read, Write, Edit, Glob, Bash(mkdir *), Bash(mv *), WebFetch
 ---
 
@@ -22,8 +22,27 @@ Invoke this skill at these moments — not just when the user explicitly asks, b
 
 - Fetch the canonical protocol from `https://raw.githubusercontent.com/belugalab/backlogmd/main/.backlogmd/PROTOCOL.md` to understand all file formats, naming conventions, and rules. If the local `.backlogmd/PROTOCOL.md` exists, prefer the remote version as the source of truth.
 - Check the protocol **Version** at the top of the document. This skill supports **Protocol v1.x.x** (any minor/patch). If the major version is greater than 1, warn the user that the skill may be outdated and suggest they use an updated skill or follow the protocol manually.
+- Check if `.backlogmd/` exists. If not, run **Step 1b: Bootstrap** before continuing.
 - Read `.backlogmd/backlog.md` to understand current items and their statuses.
 - Scan `.backlogmd/items/` to see existing item folders and their states.
+
+### Step 1b: Bootstrap (first-time setup)
+
+If `.backlogmd/` does not exist, create the initial structure:
+
+1. Create `.backlogmd/` directory.
+2. Save the fetched protocol as `.backlogmd/PROTOCOL.md`.
+3. Create `.backlogmd/backlog.md`:
+
+```
+# Roadmap
+
+## Items
+```
+
+4. Create `.backlogmd/items/` directory.
+
+Inform the user that the backlog has been initialized, then continue to Step 2.
 
 ## Step 2: Determine intent
 
@@ -31,12 +50,14 @@ Based on `$ARGUMENTS`, determine which operation the user wants:
 
 | Intent            | Trigger examples                                                                                    |
 | ----------------- | --------------------------------------------------------------------------------------------------- |
+| **Init backlog**  | "init backlog", "set up backlogmd", "initialize" (also happens automatically if `.backlogmd/` doesn't exist) |
 | **Create item**   | "add a feature for...", "new bugfix: ...", "refactor the...", "chore: ...", a work item description |
 | **Add tasks**     | "add tasks to...", "new task for..."                                                                |
 | **Update status** | "mark task X as done", "start working on...", "task X is ready for review"                          |
 | **Edit**          | "edit task...", "update description of...", "rename item..."                                        |
 | **Archive**       | "archive item...", "clean up done items"                                                            |
 | **Show status**   | "what's the current state?", "show backlog", "what's in progress?"                                  |
+| **Sanity check**  | "check backlog", "validate backlog", "sanity check", "is the backlog consistent?"                   |
 
 If the intent is ambiguous, ask the user to clarify before proceeding.
 
@@ -276,6 +297,67 @@ Show:
 - Any tasks currently in-progress and their owners
 - Items ready to archive (all tasks done but not yet archived)
 - Open item slots remaining (out of 10)
+
+---
+
+## Operation F: Sanity check
+
+Validate that the entire `.backlogmd/` system is consistent and follows the protocol. Read all files and check every rule below. Report issues grouped by severity.
+
+### F1. Read all state
+
+- Read `PROTOCOL.md` and confirm the version is supported.
+- Read `backlog.md`.
+- Scan `items/` and read every `index.md` and task file.
+- If `.archive/` exists, scan it too (read-only check).
+
+### F2. Validate structure
+
+- [ ] `PROTOCOL.md` exists and has a `**Version:**` field.
+- [ ] `backlog.md` exists and has a `# Roadmap` heading and `## Items` section.
+- [ ] Every item in `backlog.md` has a corresponding folder in `items/` (unless the link is `—`).
+- [ ] Every item folder has an `index.md`.
+- [ ] Every task file referenced in an item's task table exists.
+- [ ] No orphan task files (files in an item folder that aren't listed in the task table).
+- [ ] No more than 10 open items in `items/`.
+
+### F3. Validate formats
+
+- [ ] Every `backlog.md` entry has all required fields: Type, Status, Item, Description.
+- [ ] Every `index.md` has all required fields: Type, Status, Goal.
+- [ ] Every task file has all required fields: Status, Priority, Owner, Item.
+- [ ] Type values are valid (`feature`, `bugfix`, `refactor`, `chore`, or project-defined).
+- [ ] Item statuses in `index.md` are valid (`open` or `archived`).
+- [ ] Task statuses are valid (`todo`, `in-progress`, `ready-to-review`, `ready-to-test`, `done`).
+- [ ] Priority numbers are zero-padded to three digits and unique within their scope.
+- [ ] Slugs are lowercase kebab-case.
+- [ ] No YAML frontmatter in any file.
+
+### F4. Validate consistency
+
+- [ ] Task statuses in the task files match the corresponding rows in the item's task table.
+- [ ] Task owners in the task files match the corresponding rows in the item's task table.
+- [ ] Item Type in `index.md` matches the Type in `backlog.md`.
+- [ ] Item derived status in `backlog.md` matches what the tasks actually produce (apply the Derived Status Logic).
+- [ ] Item links in task files point to the correct `backlog.md` anchor.
+- [ ] If dependencies are used, no circular dependencies exist.
+- [ ] If dependencies are used, no task is `in-progress` while a dependency is not `done`.
+
+### F5. Validate archive
+
+- [ ] `.archive/backlog.md` entries are not duplicated in `backlog.md`.
+- [ ] Archived item folders in `.archive/items/` are not also present in `items/`.
+- [ ] Archived items have status `archived` in their `index.md`.
+
+### F6. Report
+
+Present results as:
+
+- **Errors** — protocol violations that must be fixed (mismatched statuses, missing files, broken links).
+- **Warnings** — potential issues (items with all tasks done but not archived, tasks with no owner while in-progress).
+- **OK** — checks that passed.
+
+If errors are found, offer to fix them automatically (with user confirmation before writing).
 
 ---
 
