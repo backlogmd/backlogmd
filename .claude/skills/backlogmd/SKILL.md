@@ -1,7 +1,7 @@
 ---
 name: backlogmd
 description: Use when planning work (to create items and tasks), when starting implementation (to mark tasks in-progress), when completing work (to mark tasks done), or to check backlog status. Manages .backlogmd/ for features, bugfixes, refactors, and chores.
-argument-hint: "plan: add dark mode support" | "start: 001-setup-db" | "done: 002-add-api" | "show backlog" | "archive: auth-system"
+argument-hint: plan/start/done/show/archive <item or task>
 allowed-tools: Read, Write, Edit, Glob, Bash(mkdir *), Bash(mv *), WebFetch
 ---
 
