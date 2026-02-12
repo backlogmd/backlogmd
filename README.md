@@ -1,11 +1,11 @@
 # backlog.md
 
 A simple markdown-based backlog system for agentic development.
-Tasks live as plain .md files inside your repo. No SaaS. No lock-in. No hidden state.
+Tasks live as plain `.md` files inside your repo. No SaaS. No lock-in. No hidden state.
 
 It also works as a transparency layer for your coding agents. You can clearly track what they are working on and review their changes through Git.
 
-If you do not want the backlog files tracked, just add them to .gitignore and keep your repository tidy.
+If you do not want the backlog files tracked, just add them to `.gitignore` and keep your repository tidy.
 
 ## Why
 
