@@ -28,7 +28,13 @@ Agents pick up tasks and move them through: `open` → `in-progress` → `done`.
 
 ## Visualizer
 
-Browse and explore your backlog at [backlogmd.com](https://www.backlogmd.com).
+```sh
+npx @backlogmd/serve --dir your-project-repo/.backlogmd
+```
+
+More information in [backlog.md utils](https://github.com/backlogmd/backlogmd-utils) repository.
+
+![Dashboard](docs/dashboard.png)
 
 ## Quick start
 
