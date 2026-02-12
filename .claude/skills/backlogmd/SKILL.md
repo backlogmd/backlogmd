@@ -1,8 +1,8 @@
 ---
 name: backlogmd
 description: Use when planning work (to create items and tasks), when starting implementation (to mark tasks in-progress), when completing work (to mark tasks done), or to check backlog status. Manages .backlogmd/ for features, bugfixes, refactors, and chores.
-argument-hint: init/plan/start/done/show/archive/check <item or task>
-allowed-tools: Read, Write, Edit, Glob, Bash(mkdir *), Bash(mv *), WebFetch
+argument-hint: init/create/start/done/edit/show/archive/check <item or task>
+allowed-tools: Read, Write, Edit, Glob, Bash(mkdir *), Bash(mv *)
 ---
 
 # Backlog Manager
@@ -14,33 +14,120 @@ You are an agent that manages the `.backlogmd/` backlog system. You can create i
 Invoke this skill at these moments — not just when the user explicitly asks, but as part of your natural workflow:
 
 - **Planning** — When you or the user are discussing new work (features, bugfixes, refactors, chores), use this skill to create items and tasks in the backlog. Don't just describe plans in conversation — record them.
-- **Starting work** — Before implementing a task, use this skill to mark it `in-progress` and assign an owner.
-- **Completing work** — After finishing a task, use this skill to mark it `done`, recalculate the item's derived status, and prompt for archival if the item is complete.
+- **Starting work** — Before implementing a task, use this skill to mark it `in-progress`.
+- **Completing work** — After finishing a task, use this skill to mark it `done` and prompt for archival if the item is complete.
 - **Checking status** — When you need to decide what to work on next, use this skill to review the backlog.
 
-## Step 1: Read the protocol and current state
+---
 
-- Fetch the canonical protocol from `https://raw.githubusercontent.com/belugalab/backlogmd/main/.backlogmd/PROTOCOL.md` to understand all file formats, naming conventions, and rules. If the local `.backlogmd/PROTOCOL.md` exists, prefer the remote version as the source of truth.
-- Check the protocol **Version** at the top of the document. This skill supports **Protocol v1.x.x** (any minor/patch). If the major version is greater than 1, warn the user that the skill may be outdated and suggest they use an updated skill or follow the protocol manually.
+## Spec v2.0.0 (embedded)
+
+### Directory Structure
+
+```
+.backlogmd/
+├── backlog.md               # Active items, ordered by priority
+├── work/                    # Max 50 open items
+│   ├── <item-slug>/
+│   │   ├── index.md         # Item task list
+│   │   ├── 001-task-slug.md
+│   │   └── ...
+│   └── ...
+└── .archive/                # Cold storage — read-only
+    └── <YYYY>/
+        └── <MM>/
+            └── <item-slug>/ # Archived item folders (moved intact)
+```
+
+All paths are relative within `.backlogmd/`.
+
+### Backlog Format (`backlog.md`)
+
+```md
+- [001-chore-project-foundation](work/001-chore-project-foundation/index.md)
+- [002-ci-initialize-github-actions](work/002-ci-initialize-github-actions/index.md)
+```
+
+- Bullet list of markdown links to each item's `index.md`.
+- Format: `- [<item-slug>](work/<item-slug>/index.md)`
+- Ordered by priority — first item is highest priority.
+- Slug format: `<NNN>-<name>` (e.g. `001-project-foundation`). An optional [Conventional Commits](https://www.conventionalcommits.org/) type can follow the number: `<NNN>-<type>-<name>` (e.g. `001-chore-project-foundation`). Common types: `feat`, `fix`, `refactor`, `chore`.
+
+### Item Format (`work/<item-slug>/index.md`)
+
+```md
+- [001-task-slug](001-task-slug.md)
+- [002-task-slug](002-task-slug.md)
+```
+
+- Bullet list of relative links to task files.
+- Item slug is lowercase kebab-case with priority number prefix. Optional Conventional Commits type after the number.
+
+### Task Format (`work/<item-slug>/<NNN>-<task-slug>.md`)
+
+````md
+<!-- METADATA -->
+
+```
+Task: <Task Name>
+Status: <status>
+Priority: <NNN>
+DependsOn: [<task-slug>](relative-path-to-task.md)
+```
+
+<!-- /METADATA -->
+<!-- DESCRIPTION -->
+
+## Description
+
+<detailed description>
+
+<!-- /DESCRIPTION -->
+
+<!-- ACCEPTANCE CRITERIA -->
+
+## Acceptance criteria
+
+- [ ] <criterion>
+
+<!-- /ACCEPTANCE CRITERIA -->
+````
+
+- Filenames: `<NNN>-<task-slug>.md` (zero-padded priority, unique within item).
+- Valid statuses: `open`, `block`, `in-progress`, `done`.
+- `DependsOn` is optional. When present, use a markdown link to the dependency task file (relative path). Omit the field when there are no dependencies.
+- Metadata uses HTML comment markers and a fenced code block.
+
+### Archive (`.archive/`)
+
+- Cold storage — agents skip `.archive/` during normal operations.
+- When an item is completed, move its folder from `work/<slug>/` to `.archive/<YYYY>/<MM>/<slug>/` (using the current year and month) and remove the slug from `backlog.md`.
+- Archive contents are read-only.
+
+### Workflow Rules
+
+1. Task statuses move forward: `open` → `in-progress` → `done`. Use `block` when blocked.
+2. A task cannot move to `in-progress` if its `DependsOn` task is not `done`.
+3. Circular dependencies are not allowed.
+4. When an agent changes a task's status, it must update the task file.
+5. When all tasks in an item are `done`, the item may be archived.
+6. Max 50 open items in `work/` at any time.
+
+---
+
+## Step 1: Read current state
+
 - Check if `.backlogmd/` exists. If not, run **Step 1b: Bootstrap** before continuing.
-- Read `.backlogmd/backlog.md` to understand current items and their statuses.
-- Scan `.backlogmd/items/` to see existing item folders and their states.
+- Read `.backlogmd/backlog.md` to understand current items.
+- Scan `.backlogmd/work/` to see existing item folders and their task files.
 
 ### Step 1b: Bootstrap (first-time setup)
 
 If `.backlogmd/` does not exist, create the initial structure:
 
 1. Create `.backlogmd/` directory.
-2. Save the fetched protocol as `.backlogmd/PROTOCOL.md`.
-3. Create `.backlogmd/backlog.md`:
-
-```
-# Roadmap
-
-## Items
-```
-
-4. Create `.backlogmd/items/` directory.
+2. Create `.backlogmd/backlog.md` (empty file).
+3. Create `.backlogmd/work/` directory.
 
 Inform the user that the backlog has been initialized, then continue to Step 2.
 
@@ -53,7 +140,7 @@ Based on `$ARGUMENTS`, determine which operation the user wants:
 | **Init backlog**  | "init backlog", "set up backlogmd", "initialize" (also happens automatically if `.backlogmd/` doesn't exist) |
 | **Create item**   | "add a feature for...", "new bugfix: ...", "refactor the...", "chore: ...", a work item description |
 | **Add tasks**     | "add tasks to...", "new task for..."                                                                |
-| **Update status** | "mark task X as done", "start working on...", "task X is ready for review"                          |
+| **Update status** | "mark task X as done", "start working on...", "task X is blocked"                                   |
 | **Edit**          | "edit task...", "update description of...", "rename item..."                                        |
 | **Archive**       | "archive item...", "clean up done items"                                                            |
 | **Show status**   | "what's the current state?", "show backlog", "what's in progress?"                                  |
@@ -61,16 +148,16 @@ Based on `$ARGUMENTS`, determine which operation the user wants:
 
 If the intent is ambiguous, ask the user to clarify before proceeding.
 
-### Inferring the Type
+### Inferring the Type (optional)
 
-When creating an item, infer the type from context:
+When creating an item, you may infer a Conventional Commits type from context to include in the slug. This is optional — slugs without a type are valid.
 
-- Words like "add", "implement", "build", "create" → `feature`
-- Words like "fix", "bug", "broken", "crash", "error" → `bugfix`
+- Words like "add", "implement", "build", "create" → `feat`
+- Words like "fix", "bug", "broken", "crash", "error" → `fix`
 - Words like "refactor", "clean up", "simplify", "restructure" → `refactor`
 - Words like "update deps", "migrate", "maintenance", "chore" → `chore`
 
-If the type is unclear, ask the user. The valid types are: `feature`, `bugfix`, `refactor`, `chore`. Projects may define additional types.
+If the type is unclear, omit it.
 
 ---
 
@@ -81,9 +168,8 @@ If the type is unclear, ask the user. The valid types are: `feature`, `bugfix`, 
 Based on `$ARGUMENTS`, propose:
 
 1. **Item name** — short, descriptive title
-2. **Type** — `feature`, `bugfix`, `refactor`, or `chore` (inferred or asked)
-3. **One-line description** — what this item delivers
-4. **Tasks** — break the item into concrete implementation tasks. For each task propose:
+2. **Type** (optional) — Conventional Commits type to include in the slug (e.g. `feat`, `fix`, `refactor`, `chore`)
+3. **Tasks** — break the item into concrete implementation tasks. For each task propose:
    - Task name
    - Short description (2–3 sentences)
    - Acceptance criteria (as checkbox items)
@@ -94,90 +180,49 @@ Present the full proposal and **ask for confirmation or edits** before writing a
 
 After user confirms:
 
-1. Scan `.backlogmd/items/` for existing item folders.
-2. Read each item's `index.md` and check its **Status** field.
-3. Collect all items with status `open`.
+1. Scan `.backlogmd/work/` for existing item folders.
+2. Count open items.
 
 Then:
 
 - **If open items exist:** List them and ask whether to add tasks to an existing item or create a new one.
 - **If no open items exist:** Proceed with creating a new item folder.
-- **If 10 open items already exist:** Cannot create a new folder. The user must archive an item first or add tasks to an existing one.
+- **If 50 open items already exist:** Cannot create a new folder. The user must archive an item first or add tasks to an existing one.
 
 ### A3. Write all files
 
 #### Append item to `backlog.md`
 
-Read `.backlogmd/backlog.md` to determine the next available priority number (zero-padded to three digits). Add a new entry at the end of the `## Items` section:
+Read `.backlogmd/backlog.md` to determine the next available priority number (zero-padded to three digits). Add a new entry at the end:
 
 ```
-### <NNN> - <Item Name>
-- **Type:** <type>
-- **Status:** todo
-- **Item:** [<item name>](items/<item-slug>/index.md)
-- **Description:** <one-line summary>
+- [<NNN>-<type>-<item-name-slug>](work/<NNN>-<type>-<item-name-slug>/index.md)
 ```
 
-#### Create item folder (if new)
+#### Create item folder
 
-1. Create `.backlogmd/items/<item-slug>/`
-2. Create `.backlogmd/items/<item-slug>/index.md`:
-
-```
-# <Item Name>
-
-- **Type:** <type>
-- **Status:** open
-- **Goal:** <one-line goal>
-
-## Tasks
-
-| # | Task | Status | Owner |
-|---|------|--------|-------|
-```
+1. Create `.backlogmd/work/<item-slug>/`
+2. Create `.backlogmd/work/<item-slug>/index.md` with bullet list of task links.
 
 #### Create task files
 
-For each task, create `.backlogmd/items/<item-slug>/<NNN>-<task-slug>.md`:
+For each task, create `.backlogmd/work/<item-slug>/<NNN>-<task-slug>.md` using the task format above.
 
-```
-# <Task Name>
-
-- **Status:** todo
-- **Priority:** <NNN>
-- **Owner:** —
-- **Item:** [<Item Name>](../../backlog.md#NNN---item-name-slug)
-
-## Description
-
-<detailed description>
-
-## Acceptance Criteria
-
-- [ ] <criterion>
-```
-
-- Task numbers are zero-padded to three digits and sequential within the item (check existing tasks to find the next number).
+- Task numbers are zero-padded to three digits and sequential within the item.
 - Task slugs are lowercase kebab-case derived from the task name.
-- The Item link anchor must be lowercase, with spaces replaced by `-` and the pattern `NNN---item-name`.
+- Set initial status to `open`.
 
-#### Update item task table
+#### Update item index
 
-Append a row for each new task to the `## Tasks` table in the item's `index.md`:
+Add a bullet entry for each new task to `index.md`:
 
 ```
-| <NNN> | [<Task name>](<NNN>-<task-slug>.md) | todo | — |
+- [<NNN>-<task-slug>](<NNN>-<task-slug>.md)
 ```
-
-#### Recalculate item's roadmap status
-
-After adding tasks to an existing item, recalculate the derived status (see **Derived Status Logic** in the Rules section) and update `backlog.md` if it changed. This is critical for iteration — adding a new task to an item that was `done` must move it back to `in-progress`.
 
 ---
 
 ## Operation B: Update task status
-
-This is the most critical operation for maintaining backlog consistency. Every status change must cascade through all affected files.
 
 ### B1. Identify the task
 
@@ -189,32 +234,22 @@ This is the most critical operation for maintaining backlog consistency. Every s
 
 Tasks move forward through statuses only, never backward:
 
-`todo` → `in-progress` → `ready-to-review` → `ready-to-test` → `done`
+`open` → `in-progress` → `done`
 
-- Reject any backward transition and explain why.
-- If the task has `Depends on` entries, verify all dependencies are `done` before allowing `in-progress`.
+Use `block` when a task is blocked (can transition back to `open` or `in-progress` when unblocked).
 
-### B3. Update all three locations
+- Reject any backward transition (except unblocking) and explain why.
+- If the task has `DependsOn`, verify the dependency is `done` before allowing `in-progress`.
 
-**Every status change — not just completion — must update all three files:**
+### B3. Update the task file
 
-1. **Task file** (`<NNN>-<task-slug>.md`):
-   - Update `**Status:**` to the new status.
-   - If moving to `in-progress`, set `**Owner:**` if provided (or ask).
-   - If moving to `done`, check all acceptance criteria boxes (`- [ ]` → `- [x]`).
+Update the `Status:` field in the task's metadata code block.
 
-2. **Item task table** (`index.md`):
-   - Edit the task's row to reflect the new status (and owner if changed).
+If moving to `done`, check all acceptance criteria boxes (`- [ ]` → `- [x]`).
 
-3. **Item's roadmap status** (`backlog.md`):
-   - Recalculate the derived status using the **Derived Status Logic** (see Rules section) and update `backlog.md` if it changed.
-   - Example: moving the first task to `in-progress` must also move the item from `todo` to `in-progress` in `backlog.md`.
+### B4. Handle item completion
 
-Do not skip step 3. This is what makes progress visible in the backlog.
-
-### B6. Handle item completion
-
-If the item status just became `done`:
+If all tasks in the item are now `done`:
 
 1. Inform the user that all tasks in the item are complete.
 2. Ask if they want to archive the item now.
@@ -235,12 +270,11 @@ Show the current content and ask the user what they want to change.
 ### C3. Apply edits
 
 - Edit the target file with the requested changes.
-- If editing a task's name or status, also update the item's task table to keep it in sync.
-- If editing an item's name, type, or goal, also update the corresponding `backlog.md` entry.
+- If editing a task's name, also update the item's `index.md` link to keep it in sync.
 
 ### C4. Confirm changes
 
-Show the user a summary of what was changed across all affected files.
+Show the user a summary of what was changed.
 
 ---
 
@@ -248,34 +282,22 @@ Show the user a summary of what was changed across all affected files.
 
 ### D1. Validate
 
-- Read the item's `index.md` and verify **all tasks are `done`**.
+- Read the item's task files and verify **all tasks are `done`**.
 - If any tasks are not `done`, inform the user and refuse to archive.
 
 ### D2. Create archive structure (if needed)
 
-Ensure these exist (create if missing):
-
-- `.backlogmd/.archive/`
-- `.backlogmd/.archive/items/`
-- `.backlogmd/.archive/backlog.md` (create with `# Roadmap\n\n## Items\n` header if it doesn't exist)
+Ensure `.backlogmd/.archive/` exists (create if missing).
 
 ### D3. Move the item folder
 
-Move `.backlogmd/items/<item-slug>/` to `.backlogmd/.archive/items/<item-slug>/`.
+Move `.backlogmd/work/<item-slug>/` to `.backlogmd/.archive/<YYYY>/<MM>/<item-slug>/` (using the current year and month). Create the year/month directories if they don't exist.
 
-### D4. Update item status
-
-Update the item's `index.md` status from `open` to `archived`.
-
-### D5. Update `backlog.md`
+### D4. Update `backlog.md`
 
 Remove the item entry from `.backlogmd/backlog.md`.
 
-### D6. Update `.archive/backlog.md`
-
-Append the item entry (preserving its original priority number, with status `done`) to `.backlogmd/.archive/backlog.md`.
-
-### D7. Confirm
+### D5. Confirm
 
 Report to the user that the item has been archived and how many open item slots remain.
 
@@ -286,75 +308,67 @@ Report to the user that the item has been archived and how many open item slots 
 ### E1. Read all state
 
 - Read `backlog.md` for the item overview.
-- Scan item folders and read each item's `index.md` task table.
+- Scan item folders and read each item's task files.
 
 ### E2. Present a summary
 
 Show:
 
-- Total items and their statuses (todo / in-progress / done), grouped by type
-- For each item: task breakdown (e.g. "3/5 tasks done")
-- Any tasks currently in-progress and their owners
+- Total items and their types
+- For each item: task breakdown by status (e.g. "3/5 tasks done")
+- Any tasks currently in-progress
 - Items ready to archive (all tasks done but not yet archived)
-- Open item slots remaining (out of 10)
+- Open item slots remaining (out of 50)
 
 ---
 
 ## Operation F: Sanity check
 
-Validate that the entire `.backlogmd/` system is consistent and follows the protocol. Read all files and check every rule below. Report issues grouped by severity.
+Validate that the entire `.backlogmd/` system is consistent. Read all files and check every rule below. Report issues grouped by severity.
 
 ### F1. Read all state
 
-- Read `PROTOCOL.md` and confirm the version is supported.
 - Read `backlog.md`.
-- Scan `items/` and read every `index.md` and task file.
+- Scan `work/` and read every `index.md` and task file.
 - If `.archive/` exists, scan it too (read-only check).
 
 ### F2. Validate structure
 
-- [ ] `PROTOCOL.md` exists and has a `**Version:**` field.
-- [ ] `backlog.md` exists and has a `# Roadmap` heading and `## Items` section.
-- [ ] Every item in `backlog.md` has a corresponding folder in `items/` (unless the link is `—`).
+- [ ] `backlog.md` exists.
+- [ ] Every item in `backlog.md` has a corresponding folder in `work/`.
 - [ ] Every item folder has an `index.md`.
-- [ ] Every task file referenced in an item's task table exists.
-- [ ] No orphan task files (files in an item folder that aren't listed in the task table).
-- [ ] No more than 10 open items in `items/`.
+- [ ] Every task file referenced in an item's `index.md` exists.
+- [ ] No orphan task files (files in an item folder that aren't listed in `index.md`).
+- [ ] No more than 50 open items in `work/`.
 
 ### F3. Validate formats
 
-- [ ] Every `backlog.md` entry has all required fields: Type, Status, Item, Description.
-- [ ] Every `index.md` has all required fields: Type, Status, Goal.
-- [ ] Every task file has all required fields: Status, Priority, Owner, Item.
-- [ ] Type values are valid (`feature`, `bugfix`, `refactor`, `chore`, or project-defined).
-- [ ] Item statuses in `index.md` are valid (`open` or `archived`).
-- [ ] Task statuses are valid (`todo`, `in-progress`, `ready-to-review`, `ready-to-test`, `done`).
+- [ ] Every `backlog.md` entry follows the format `- [<slug>](work/<slug>/index.md)`.
+- [ ] Every `index.md` is a bullet list of task links.
+- [ ] Every task file has METADATA, DESCRIPTION, and ACCEPTANCE CRITERIA sections.
+- [ ] Every task has required metadata fields: Task, Status, Priority.
+- [ ] Task statuses are valid (`open`, `block`, `in-progress`, `done`).
 - [ ] Priority numbers are zero-padded to three digits and unique within their scope.
 - [ ] Slugs are lowercase kebab-case.
-- [ ] No YAML frontmatter in any file.
+- [ ] If a type segment is present in slugs, it follows Conventional Commits (e.g. `feat`, `fix`, `refactor`, `chore`).
 
 ### F4. Validate consistency
 
-- [ ] Task statuses in the task files match the corresponding rows in the item's task table.
-- [ ] Task owners in the task files match the corresponding rows in the item's task table.
-- [ ] Item Type in `index.md` matches the Type in `backlog.md`.
-- [ ] Item derived status in `backlog.md` matches what the tasks actually produce (apply the Derived Status Logic).
-- [ ] Item links in task files point to the correct `backlog.md` anchor.
+- [ ] Task files listed in `index.md` match actual files in the folder.
 - [ ] If dependencies are used, no circular dependencies exist.
-- [ ] If dependencies are used, no task is `in-progress` while a dependency is not `done`.
+- [ ] If dependencies are used, no task is `in-progress` while its dependency is not `done`.
 
 ### F5. Validate archive
 
-- [ ] `.archive/backlog.md` entries are not duplicated in `backlog.md`.
-- [ ] Archived item folders in `.archive/items/` are not also present in `items/`.
-- [ ] Archived items have status `archived` in their `index.md`.
+- [ ] Archived item folders in `.archive/` are not also present in `work/`.
+- [ ] `backlog.md` does not reference archived items.
 
 ### F6. Report
 
 Present results as:
 
-- **Errors** — protocol violations that must be fixed (mismatched statuses, missing files, broken links).
-- **Warnings** — potential issues (items with all tasks done but not archived, tasks with no owner while in-progress).
+- **Errors** — spec violations that must be fixed (missing files, broken links, invalid statuses).
+- **Warnings** — potential issues (items with all tasks done but not archived).
 - **OK** — checks that passed.
 
 If errors are found, offer to fix them automatically (with user confirmation before writing).
@@ -363,33 +377,10 @@ If errors are found, offer to fix them automatically (with user confirmation bef
 
 ## Rules
 
-- This skill targets **Protocol v1.x.x**. Respect the versioning rules in `PROTOCOL.md`.
-- Follow the formats in `PROTOCOL.md` exactly — no YAML frontmatter, pure markdown.
+- Follow the spec formats exactly — no YAML frontmatter.
 - All paths are relative within `.backlogmd/`.
 - Never overwrite existing items or tasks — only append (for creation) or edit in place (for updates).
 - Always confirm with the user before writing or modifying files.
-- Max 10 open items in `items/`. If the limit is reached, the user must archive an item or use an existing one.
+- Max 50 open items in `work/`. If the limit is reached, the user must archive an item or use an existing one.
 - The `.archive/` directory is cold storage. After moving items into it, never modify them again.
-- **Consistency rule:** When updating a task status or adding tasks, always update **all three locations**: the task file, the item task table, and the derived item status in `backlog.md`.
-- **Completion rule:** When all tasks in an item reach `done`, always update the item's roadmap status to `done` and prompt the user about archiving.
-
-### Task status movement
-
-Individual task statuses only move forward, never backward:
-
-`todo` → `in-progress` → `ready-to-review` → `ready-to-test` → `done`
-
-A completed task cannot be reopened. If the work needs revisiting, create a new task for the iteration instead.
-
-### Derived Status Logic
-
-An item's roadmap status in `backlog.md` is **derived** from its tasks and must be recalculated after every task change (status update or new task added):
-
-1. **All tasks `done`** → item status is `done`
-2. **Any task `in-progress`, `ready-to-review`, or `ready-to-test`** → item status is `in-progress`
-3. **Mix of `done` and `todo` tasks** (some work completed, new work pending) → item status is `in-progress`
-4. **All tasks `todo`** → item status is `todo`
-
-Rule 3 is essential for iteration: when a new task is added to an item that already has completed tasks, the item moves to `in-progress` — not back to `todo`. The item has been worked on, and new tasks represent the next iteration, not a restart.
-
-Because the item status is derived, it naturally moves in both directions as the task composition changes. This is not a violation of forward-only movement — only individual tasks are constrained to move forward. The item status simply reflects reality.
+- A completed task cannot be reopened. If the work needs revisiting, create a new task instead.

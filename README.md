@@ -12,20 +12,19 @@ Drop a `.backlogmd/` folder into any repo:
 
 ```
 .backlogmd/
-├── PROTOCOL.md              # Rules and formats
-├── backlog.md               # Item roadmap
-└── items/
+├── backlog.md               # Item list (one slug per line)
+└── work/
     └── <item-slug>/
-        ├── index.md          # Item overview + task table
+        ├── index.md          # Bullet list of task links
         ├── 001-task-slug.md
         └── ...
 ```
 
-- **Items** live in `backlog.md`, ordered by priority. Each item has a type: `feature`, `bugfix`, `refactor`, or `chore`.
-- **Item folders** group tasks into deliverable chunks
-- **Tasks** are individual markdown files with status, owner, and acceptance criteria
+- **Items** are listed in `backlog.md` as linked slugs ordered by priority (e.g. `001-project-foundation`). An optional [Conventional Commits](https://www.conventionalcommits.org/) type can be included (e.g. `001-chore-project-foundation`).
+- **Item folders** group tasks into deliverable chunks under `work/`
+- **Tasks** are individual markdown files with metadata in HTML comment sections and status tracking
 
-Agents read `PROTOCOL.md` to understand the format, then pick up tasks and move them through: `todo` → `in-progress` → `ready-to-review` → `ready-to-test` → `done`.
+Agents pick up tasks and move them through: `open` → `in-progress` → `done`.
 
 ## Visualizer
 
@@ -34,10 +33,9 @@ Browse and explore your backlog at [backlogmd.com](https://www.backlogmd.com).
 ## Quick start
 
 1. Create a `.backlogmd/` folder in your repo
-2. Add a `PROTOCOL.md` (see [the spec](.backlogmd/PROTOCOL.md))
-3. Add items to `backlog.md`
-4. Create items and tasks
-5. Point your agents at `PROTOCOL.md` and let them work
+2. Add items to `backlog.md`
+3. Create items and tasks
+4. Let your agents work
 
 ## License
 
