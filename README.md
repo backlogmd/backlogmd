@@ -1,5 +1,7 @@
 # backlog.md
 
+> **[Spec v3.0.0](SPEC.md)** — the full specification for the `.backlogmd/` system.
+
 A simple markdown-based backlog system for agentic development.
 Tasks live as plain `.md` files inside your repo. No SaaS. No lock-in. No hidden state.
 
