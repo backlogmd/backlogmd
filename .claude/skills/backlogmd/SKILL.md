@@ -143,7 +143,7 @@ Any active state ──→ block ──→ in-progress or open
 
 ### Limits
 
-- Max 50 open items (max 50 directories in `work/`). Recommended max 20 tasks per item.
+- Max 20 open items (max 20 directories in `work/`). Recommended max 20 tasks per item.
 
 ### Reconciliation
 
@@ -224,7 +224,7 @@ Then:
 
 - **If open items exist:** List them and ask whether to add tasks to an existing item or create a new one.
 - **If no open items exist:** Proceed with creating a new item folder.
-- **If 50 directories already in work/:** Archive a completed item first (all tasks `done`), then create. If none can be archived, inform the user.
+- **If 20 directories already in work/:** Archive a completed item first (all tasks `done`), then create. If none can be archived, inform the user.
 
 ### A3. Write all files (no shared file)
 
@@ -322,7 +322,7 @@ Show the user a summary of what was changed.
 
 ### D3. Confirm
 
-Report to the user that the item has been archived and how many open item directories remain in `work/` (out of 50).
+Report to the user that the item has been archived and how many open item directories remain in `work/` (out of 20).
 
 ---
 
@@ -341,7 +341,7 @@ Show:
 - Any tasks currently `in-progress` (and their assignees)
 - Any tasks in `review` awaiting human approval
 - Items ready to archive (all tasks `done`)
-- Open item count (directories in `work/`) and limit (50)
+- Open item count (directories in `work/`) and limit (20)
 
 ---
 
@@ -359,7 +359,7 @@ Validate that the entire `.backlogmd/` system is consistent. Read all files and 
 - [ ] `work/` exists. No requirement for `backlog.md` or `manifest.json`.
 - [ ] Every item folder under `work/` has an `index.md`.
 - [ ] Task files are named `<tid>-<task-slug>.md` (zero-padded tid, kebab-case slug).
-- [ ] No more than 50 directories in `work/`.
+- [ ] No more than 20 directories in `work/`.
 
 ### F3. Validate formats
 
@@ -399,7 +399,7 @@ If errors are found, offer to fix them (with user confirmation). Task file is so
 - **Task edits:** write only the task file. **Item edits:** write only that item's `index.md`. **Feedback:** write only the task's `-feedback.md`. Never update a shared manifest or backlog file.
 - Never overwrite existing items or tasks — only create new item dirs/task files or edit in place.
 - Always confirm with the user before writing or modifying files.
-- Max 50 open items (directories in `work/`). If the limit is reached, the user must archive an item or use an existing one.
+- Max 20 open items (directories in `work/`). If the limit is reached, the user must archive an item or use an existing one.
 - The `.archive/` directory is cold storage. After moving items into it, never modify them again.
 - A completed task cannot be reopened. If the work needs revisiting, create a new task instead.
 - When `requiresHumanReview: true`, agents MUST NOT move a task directly from `in-progress` to `done` — it must go through `review`.

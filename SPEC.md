@@ -184,7 +184,7 @@ File-based systems cannot provide true atomicity. To minimize inconsistency:
 
 ## Limits
 
-- Max 50 open items (max 50 directories in `work/`).
+- Max 20 open items (max 20 directories in `work/`).
 - Recommended max 20 tasks per item. Items with more should be split into a new item.
 
 ## Workflow Rules
