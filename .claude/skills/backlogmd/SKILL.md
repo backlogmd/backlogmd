@@ -1,33 +1,32 @@
 ---
 name: backlogmd
-description: Use when planning work (to create items and tasks), when starting implementation (to claim and work tasks), when completing work (to mark tasks done), or to check backlog status. Manages .backlogmd/ with manifest.json for features, bugfixes, refactors, and chores.
+description: Use when planning work (to create items and tasks), when starting implementation (to start and work tasks), when completing work (to mark tasks done), or to check backlog status. Manages .backlogmd/ (work/ and .archive/); no shared manifest or backlog file. Item index.md has metadata, description, and CONTEXT for agents.
 argument-hint: init/create/start/done/edit/show/archive/check <item or task>
 allowed-tools: Read, Write, Edit, Glob, Bash(mkdir *), Bash(mv *)
 ---
 
 # Backlog Manager
 
-You are an agent that manages the `.backlogmd/` backlog system. You can create items (features, bugfixes, refactors, chores) and tasks, claim and release tasks, update statuses, edit content, and archive completed work. The manifest (`manifest.json`) is the machine-readable index — read it before acting and update it alongside every file edit.
+You are an agent that manages the `.backlogmd/` backlog system. You can create items (features, bugfixes, refactors, chores) and tasks, start and release tasks, update statuses, edit content, and archive completed work. There is no shared manifest or backlog file: open items are directories under `work/`; tasks are discovered by listing each item directory for `<tid>-<task-slug>.md` files; each item's `index.md` holds metadata, description, and `<!-- CONTEXT -->` for agents. Write only the task file (or only `index.md` for item-level edits); never regenerate a shared index.
 
 ## Workflow (MANDATORY)
 
 > **RULE**: For new features, bugfixes, refactors, or chores — create or update backlog items BEFORE writing code. The backlog is the source of truth for planned work. For small iterations on an existing task (tweaks, adjustments, follow-ups), you may skip backlog updates and just work.
 
-1. **Before planning**: Read `manifest.json` and check the backlog for existing items and tasks.
-2. **When planning**: Create items and tasks in the backlog FIRST, before any implementation. Don't just describe plans in conversation — record them. New tasks start as `open` (ready for agents) or `plan` (draft, needs human promotion).
+1. **Before planning**: List `.backlogmd/work/`, read each item's `index.md` (metadata, CONTEXT) and list task files to see existing items and tasks.
+2. **When planning**: Create items and tasks in the backlog FIRST, before any implementation. Don't just describe plans in conversation — record them. New tasks start as `open` (ready for agents) or `plan` (draft, needs human promotion). Item `status` in `index.md`: `plan` | `open` | `in-progress` | `done`.
 3. **Wait for approval**: After planning, present the plan to the user and **STOP**. Do NOT start implementing until the user explicitly approves.
 4. **When implementing**: Follow this loop for EACH task, one at a time:
-   - **Claim** the task: set `s: reserved`, `a: <agent-id>`.
-   - **Start** the task: set `s: ip` (verify every `dep` path resolves to a task with `s: done` first).
+   - **Start** the task: set `status: in-progress`, `assignee: <agent-id>` (and optionally `expiresAt`) in the task file. First verify every `dep` path resolves to a task file with `status: done`. Read the item's `index.md` (especially `<!-- CONTEXT -->`) and any `<tid>-<task-slug>-feedback.md` if present.
    - **Implement** the task.
-   - **Complete** the task: if `h: false`, set `s: done` and clear `a`. If `h: true`, set `s: review` and **stop** — only a human may move `review → done`.
+   - **Complete** the task: if `requiresHumanReview: false`, set `status: done` and clear `assignee`. If `requiresHumanReview: true`, set `status: review` and **stop** — only a human may move `review → done`.
    - **Only then** move to the next task.
-   - **Always** write manifest first, then task file, then `index.md`.
+   - **Writes**: Task edits → task file only. Item-level edits → `index.md` only. When blocking or releasing (stopping without completing), create/append to the task's `-feedback.md` file.
 5. **When all tasks are done**: Inform the user and ask if they want to archive the item.
 
 ---
 
-## Spec v3.0.1 (embedded)
+## Spec v4.0.2 (embedded)
 
 Single source of truth for `.backlogmd/` is `SPEC.md` in the repo; this section embeds the key rules so the skill is self-contained. When in doubt, prefer `SPEC.md`.
 
@@ -35,12 +34,11 @@ Single source of truth for `.backlogmd/` is `SPEC.md` in the repo; this section 
 
 ```
 .backlogmd/
-├── backlog.md
-├── manifest.json
 ├── work/
 │   ├── <item-id>-<slug>/
 │   │   ├── index.md
 │   │   ├── 001-task-slug.md
+│   │   ├── 001-task-slug-feedback.md   # optional, agent feedback when stuck
 │   │   ├── 002-task-slug.md
 │   │   └── ...
 │   └── ...
@@ -50,34 +48,44 @@ Single source of truth for `.backlogmd/` is `SPEC.md` in the repo; this section 
 
 All paths are relative within `.backlogmd/`.
 
+### Open items
+
+- **Open items** are the directories under `work/`. Agents discover work by listing `work/`, then for each item directory reading `index.md` (metadata, including item `status`, and `<!-- CONTEXT -->`) and listing task files (filenames matching `<tid>-<task-slug>.md`). Items with `status: plan` are not ready for agents; items with `status: open` may have tasks ready to start.
+- **Archived items** are under `.archive/`; agents skip them for active work.
+- When every task in an item has `status: done`, archive the item by moving its folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/`.
+
 ### IDs and Naming
 
 - **Item IDs** (`item-id`): Zero-padded integers, minimum 3 digits (e.g., `001`, `012`, `999`, `1000`). Unique across the backlog.
 - **Task IDs** (`tid`): Zero-padded integers, minimum 3 digits. Unique per item.
 - **Slugs**: Lowercase kebab-case. An optional Conventional Commit type may follow the ID as the first slug segment (e.g., `001-chore-project-foundation`).
-- **Priority** (`p`): Integer, unique per item. **Lower number = higher priority.**
-
-### Backlog Format (`backlog.md`)
-
-```md
-- [001-chore-project-foundation](work/001-chore-project-foundation/index.md)
-- [002-ci-initialize-github-actions](work/002-ci-initialize-github-actions/index.md)
-```
-
-- Bullet list of markdown links to each item's `index.md`, sorted by `item-id` ascending.
-- Format: `- [<item-id>-<slug>](work/<item-id>-<slug>/index.md)`
-- Completed items are removed from `backlog.md` and their folder is moved to `.archive/`.
+- **Priority** (`priority`): Integer, unique per item. **Lower number = higher priority.**
 
 ### Item Format (`work/<item-id>-<slug>/index.md`)
 
-```md
-- [001-setup-repo](001-setup-repo.md)
-- [002-init-ci](002-init-ci.md)
+- Item-level metadata, description, and a **CONTEXT** section for agents. It does **not** list tasks. Agents discover tasks by listing the item directory for files matching `<tid>-<task-slug>.md` (excluding `index.md`).
+- Three HTML comment markers: `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, `<!-- CONTEXT -->`. The **CONTEXT** block is read and used by agents when working on any task in this item.
+
+**Structure:**
+
+````md
+<!-- METADATA -->
+
+```yaml
+task: Add login flow # item title
+status: open # plan | open | in-progress | done
 ```
 
-- Bullet list of relative links to task files within the same directory.
-- Sorted by task id (`tid`) ascending.
-- Format: `- [<tid>-<task-slug>](<tid>-<task-slug>.md)`
+<!-- DESCRIPTION -->
+
+<optional item description>
+
+<!-- CONTEXT -->
+
+<context for agents: conventions, links, env notes, etc.>
+````
+
+**Item status:** `plan` (grooming, not ready) | `open` (ready for agents) | `in-progress` (at least one task in progress) | `done` (all tasks done, ready to archive).
 
 ### Task Format (`work/<item-id>-<slug>/<tid>-<task-slug>.md`)
 
@@ -85,12 +93,12 @@ All paths are relative within `.backlogmd/`.
 <!-- METADATA -->
 
 ```yaml
-t: Add login form
-s: plan # plan | open | reserved | ip | review | block | done
-p: 10 # priority within item (lower = higher priority)
+task: Add login form
+status: plan # plan | open | in-progress | review | block | done
+priority: 10 # priority within item (lower = higher priority)
 dep: ["work/002-ci-initialize-github-actions/001-ci-cd-setup.md"] # optional: paths (relative to .backlogmd/) to tasks that must be done before this task can start
-a: "" # assignee/agent id; empty string if unassigned
-h: false # true if human review required before done
+assignee: "" # assignee/agent id; empty string if unassigned
+requiresHumanReview: false # true if human review required before done
 expiresAt: null # ISO 8601 timestamp for reservation expiry, or null
 ```
 
@@ -107,149 +115,55 @@ expiresAt: null # ISO 8601 timestamp for reservation expiry, or null
 - [ ] <criterion>
 ````
 
-- Filenames: `<tid>-<task-slug>.md`; `tid` zero-padded, unique per item.
-- Status codes:
-  - `plan` — groomed/draft, not ready for agents to pick up.
-  - `open` — ready to be claimed by an agent.
-  - `reserved` — claimed, awaiting start. Requires `a` (non-empty).
-  - `ip` — in progress. Requires `a` (non-empty).
-  - `review` — awaiting human approval. Set when `h: true` and work is complete. Requires `a`.
-  - `block` — blocked by an external dependency. `a` is preserved.
-  - `done` — complete. `a` is cleared.
-- **Dependencies (`dep`):** Each entry is a path relative to `.backlogmd/`: `work/<item-id>-<slug>/<tid>-<task-slug>.md` (e.g. `work/002-ci-initialize-github-actions/001-ci-cd-setup.md`). Cross-item deps allowed. Agents must wait for each referenced task to be `s: done` before moving to `ip`. No self-reference; no duplicates; no cycles (backlog must remain a DAG).
-- Three HTML comment markers only: `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, `<!-- ACCEPTANCE -->`.
-- Acceptance criteria use markdown checkboxes.
-- No YAML frontmatter outside the fenced block; keep metadata lines ≤ 120 chars.
+- Filenames: `<tid>-<task-slug>.md`; `tid` zero-padded, unique per item. Optional sibling: `<tid>-<task-slug>-feedback.md` for agent feedback when stuck or blocking.
+- Status codes: `plan` | `open` | `in-progress` | `review` | `block` | `done`. `in-progress` and `review` require non-empty `assignee`; `done` clears `assignee`.
+- **dep**: Paths relative to `.backlogmd/`: `work/<item-id>-<slug>/<tid>-<task-slug>.md`. Cross-item allowed. No self-reference, no duplicates, no cycles (DAG). Task cannot move to `in-progress` until every `dep` task has `status: done`.
 
-### Manifest (`manifest.json`)
+### Human-in-the-Loop Protocol
 
-Machine-readable index. Agents MUST read the manifest before acting and MUST update it alongside every file edit. The file is **strict JSON** (no trailing commas, no comments).
+- **Write ordering:** Task edits → task file only. Item edits → `index.md` only. Feedback → `-feedback.md` only. No shared file to update.
+- **Starting work:** List `work/`, list task files per item, find `status: open`. Read item `index.md` (CONTEXT) and task `-feedback.md` if present. Set `status: in-progress`, `assignee: <agent-id>`, optionally `expiresAt`. Require every `dep` task file to have `status: done` before starting. Update only the task file.
+- **Completing:** If `requiresHumanReview: false` → `status: done`, clear `assignee`. If `requiresHumanReview: true` → set `status: review` and **stop**.
+- **Releasing:** Set `status: open`, clear `assignee` and `expiresAt`. If releasing because stuck, append to task's `-feedback.md` first.
+- **Blocking:** Set `status: block`; MUST create/append to task's `-feedback.md` (what was tried, why blocked, what would unblock).
+- **Expiry:** If `expiresAt` in the past, another agent may take over (set `status: in-progress`, new `assignee`, fresh `expiresAt`).
 
-```jsonc
-{
-  "specVersion": "3.0.1",
-  "updatedAt": "2026-02-13T12:00:00Z", // set on every manifest write
-  "openItemCount": 1,
-  "items": [
-    {
-      "id": "001",
-      "slug": "chore-project-foundation",
-      "path": "work/001-chore-project-foundation",
-      "status": "open", // open | archived
-      "updated": "2026-02-13T11:59:00Z",
-      "tasks": [
-        {
-          "tid": "001",
-          "slug": "setup-repo",
-          "file": "001-setup-repo.md",
-          "t": "Set up repository structure",
-          "s": "done",
-          "p": 5,
-          "dep": [],
-          "a": "",
-          "h": false,
-          "expiresAt": null
-        },
-        {
-          "tid": "002",
-          "slug": "init-ci",
-          "file": "002-init-ci.md",
-          "t": "Initialize CI pipeline",
-          "s": "reserved",
-          "p": 10,
-          "dep": ["work/001-chore-project-foundation/001-setup-repo.md"],
-          "a": "alice",
-          "h": true,
-          "expiresAt": "2026-02-13T15:00:00Z"
-        }
-      ]
-    }
-  ]
-}
-```
-
-- Item `status` (`open | archived`) is distinct from task `s`.
-- Each task entry includes `slug` and `file` so agents can resolve paths without reading `index.md`. Task `dep` uses the same path format: `work/<item-id>-<slug>/<tid>-<task-slug>.md`; cross-item dependencies are allowed.
-- `updatedAt` at the root MUST be set to current ISO 8601 timestamp (UTC, trailing `Z`) on every write.
-- `expiresAt` is `null` (not `""`) when unset, in both JSON and YAML.
-
-### Claim & Human-in-the-Loop Protocol
-
-**Write ordering:** manifest → task file → `index.md` (if affected).
-
-- Manifest is authoritative for status/assignment; task files are authoritative for content.
-- If a write fails midway, trust the manifest for `s`, `a`, `p`, `dep`, `h`, `expiresAt`.
-
-**Claiming:** Re-read manifest. If `s` is `open`, set `s: reserved`, `a: <agent-id>`, optionally `expiresAt`. Only `open` tasks may be claimed (`plan` must be promoted to `open` first).
-
-**Starting work:** Set `s: ip` (keep `a`). A task cannot move to `ip` until **every** dependency in `dep` is done: each `dep` entry is a path `work/<item-id>-<slug>/<tid>-<task-slug>.md`; resolve that path to the task in the manifest and require `s === "done"` for each. Agents wait for each referenced work/task to be done before starting.
-
-**Completing:** If `h: false`: set `s: done`, clear `a`. If `h: true`: set `s: review` and **stop** — direct `ip → done` is invalid when `h: true`.
-
-**Releasing:** Set `s: open`, clear `a` and `expiresAt`.
-
-**Expiry:** If `expiresAt` is past, another agent may reclaim. Applies only in `reserved` and `ip`.
-
-**Blocking:** Set `s: block` when externally blocked. `a` remains. Transitions out: `ip` (unblocked) or `open` (released).
-
-### Status Flow
+### Status flow
 
 ```
-plan ──→ open ──→ reserved ──→ ip ──→ done           (h: false)
-                                  ──→ review ──→ done (h: true)
+plan ──→ open ──→ in-progress ──→ done           (requiresHumanReview: false)
+                            ──→ review ──→ done (requiresHumanReview: true)
 
-Any active state ──→ block ──→ ip or open
+Any active state ──→ block ──→ in-progress or open
 ```
-
-- No circular dependencies: the set of all tasks and their `dep` paths must form a DAG across the backlog.
 
 ### Archive
 
-- Cold storage; agents skip `.archive/`.
-- Archive **only when every task in the item has `s: done`**.
-- Procedure (execute in order):
-  1. Move the item folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/`.
-  2. Remove the item's entry from `backlog.md`.
-  3. Set item `status: "archived"` in `manifest.json` (keep the entry for history).
-- `openItemCount` excludes archived items. Archive contents are read-only.
-
-### Reconciliation
-
-- **Status/assignment fields** (`s`, `a`, `p`, `dep`, `h`, `expiresAt`): manifest wins. Update task file to match.
-- **Content fields** (description, acceptance criteria): task file wins. Update manifest `t` if title changed.
-- **`index.md`**: regenerate from task files on disk, sorted by `tid`.
+- Archive **only when every task in the item has `status: done`**. Move the item folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/` (including any `-feedback.md` files). No shared file to update.
 
 ### Limits
 
-- Max 50 open items (`openItemCount <= 50`).
-- Recommended max 20 tasks per item. Items with more should be split.
+- Max 50 open items (max 50 directories in `work/`). Recommended max 20 tasks per item.
+
+### Reconciliation
+
+- Task files and directory structure are the source of truth. No task list in `index.md`. If a task is `done`, `assignee` MUST be empty in the task file.
 
 ---
 
 ## Step 1: Read current state
 
 - Check if `.backlogmd/` exists. If not, run **Step 1b: Bootstrap** before continuing.
-- Read `.backlogmd/manifest.json` for the full item/task index.
-- Read `.backlogmd/backlog.md` to understand current items.
-- If manifest is missing or stale, scan `.backlogmd/work/` and reconcile.
+- List `.backlogmd/work/` to get open item directories.
+- For each item directory, read `index.md` (metadata, item `status`, CONTEXT) and list task files (`<tid>-<task-slug>.md`) and read their metadata to understand current items and tasks. Ignore `-feedback.md` for discovery; read them when working on a specific task.
 
 ### Step 1b: Bootstrap (first-time setup)
 
 If `.backlogmd/` does not exist, create the initial structure:
 
 1. Create `.backlogmd/` directory.
-2. Create `.backlogmd/backlog.md` (empty file).
-3. Create `.backlogmd/work/` directory.
-4. Create `.backlogmd/manifest.json`:
-
-```json
-{
-  "specVersion": "3.0.1",
-  "updatedAt": "<current ISO 8601 UTC>",
-  "openItemCount": 0,
-  "items": []
-}
-```
+2. Create `.backlogmd/work/` directory.
+3. Create `.backlogmd/.archive/` directory (optional; can be created when first archiving).
 
 Inform the user that the backlog has been initialized, then continue to Step 2.
 
@@ -262,7 +176,7 @@ Based on `$ARGUMENTS`, determine which operation the user wants:
 | **Init backlog**  | "init backlog", "set up backlogmd", "initialize" (also happens automatically if `.backlogmd/` doesn't exist) |
 | **Create item**   | "add a feature for...", "new bugfix: ...", "refactor the...", "chore: ...", a work item description          |
 | **Add tasks**     | "add tasks to...", "new task for..."                                                                         |
-| **Update status** | "mark task X as done", "start working on...", "task X is blocked", "claim task...", "release task..."        |
+| **Update status** | "mark task X as done", "start working on...", "task X is blocked", "release task...", "stop working on..."        |
 | **Edit**          | "edit task...", "update description of...", "rename item..."                                                 |
 | **Archive**       | "archive item...", "clean up done items"                                                                     |
 | **Show status**   | "what's the current state?", "show backlog", "what's in progress?"                                           |
@@ -292,10 +206,10 @@ Based on `$ARGUMENTS`, propose:
 1. **Item name** — short, descriptive title
 2. **Type** (optional) — Conventional Commits type to include in the slug (e.g. `feat`, `fix`, `refactor`, `chore`)
 3. **Tasks** — break the item into concrete implementation tasks. For each task propose:
-   - Task name (`t`)
+   - Task name (`task`)
    - Short description (2–3 sentences)
    - Acceptance criteria (as checkbox items)
-   - Whether human review is required (`h`)
+   - Whether human review is required (`requiresHumanReview`)
 
 Present the full proposal and **ask for confirmation or edits** before writing any files.
 
@@ -303,20 +217,24 @@ Present the full proposal and **ask for confirmation or edits** before writing a
 
 After user confirms:
 
-1. Read `manifest.json` to get current `openItemCount` and existing item IDs.
-2. Determine the next available `item-id`.
+1. List `.backlogmd/work/` to get existing item directory names and infer existing item IDs.
+2. Determine the next available `item-id` (e.g. next number after highest existing).
 
 Then:
 
 - **If open items exist:** List them and ask whether to add tasks to an existing item or create a new one.
 - **If no open items exist:** Proceed with creating a new item folder.
-- **If 50 items already exist:** Archive a completed item first (all tasks `done`), then create. If none can be archived, inform the user.
+- **If 50 directories already in work/:** Archive a completed item first (all tasks `done`), then create. If none can be archived, inform the user.
 
-### A3. Write all files (manifest first)
+### A3. Write all files (no shared file)
 
-#### 1. Update `manifest.json`
+#### 1. Create item directory and `index.md`
 
-Add the new item entry with all task entries. Set `updatedAt` to now.
+Create `.backlogmd/work/<item-id>-<slug>/` and `.backlogmd/work/<item-id>-<slug>/index.md` with:
+
+- `<!-- METADATA -->` YAML: `task: <item title>`, `status: open` (or `plan` if not ready for agents).
+- `<!-- DESCRIPTION -->` (optional).
+- `<!-- CONTEXT -->` (optional; add context for agents if any).
 
 #### 2. Create task files
 
@@ -325,19 +243,7 @@ For each task, create `.backlogmd/work/<item-id>-<slug>/<tid>-<task-slug>.md` us
 - Task IDs are zero-padded to three digits and sequential within the item.
 - Task slugs are lowercase kebab-case derived from the task name.
 - Set initial status to `open` (or `plan` if the task needs grooming).
-- Set `a: ""`, `expiresAt: null`.
-
-#### 3. Create item `index.md`
-
-Create `.backlogmd/work/<item-id>-<slug>/index.md` with bullet list of task links sorted by `tid`.
-
-#### 4. Append item to `backlog.md`
-
-Add a new entry sorted by `item-id` ascending:
-
-```
-- [<item-id>-<slug>](work/<item-id>-<slug>/index.md)
-```
+- Set `assignee: ""`, `expiresAt: null`.
 
 ---
 
@@ -345,7 +251,7 @@ Add a new entry sorted by `item-id` ascending:
 
 ### B1. Identify the task
 
-- Read `manifest.json` to locate the task.
+- List `.backlogmd/work/` and scan item directories for task files (`<tid>-<task-slug>.md`); read metadata to locate the task (by name, id, or slug).
 - If ambiguous, list matching tasks and ask the user to pick one.
 
 ### B2. Validate the transition
@@ -353,30 +259,29 @@ Add a new entry sorted by `item-id` ascending:
 Valid status flow:
 
 ```
-plan ──→ open ──→ reserved ──→ ip ──→ done       (h: false)
-                                  ──→ review ──→ done (h: true)
-Any active state ──→ block ──→ ip or open
+plan ──→ open ──→ in-progress ──→ done       (requiresHumanReview: false)
+                            ──→ review ──→ done (requiresHumanReview: true)
+Any active state ──→ block ──→ in-progress or open
 ```
 
 - `plan → open`: promotion (human or authorized agent only).
-- `open → reserved`: claim — set `a` to agent ID, optionally set `expiresAt`.
-- `reserved → ip`: start work — verify every `dep` path resolves to a task with `s: done`.
-- `ip → done`: only valid when `h: false`. Clear `a`.
-- `ip → review`: required when `h: true`. Keep `a`. Agent must **stop**.
-- `review → done`: human only. Clear `a`.
-- Any active → `block`: set when externally blocked. `a` preserved.
-- `block → ip`: when unblocked. `block → open`: when releasing claim (clear `a`).
+- `open → in-progress`: start work — set `assignee` (and optionally `expiresAt`); verify every `dep` path resolves to a task with `status: done`.
+- `in-progress → done`: only valid when `requiresHumanReview: false`. Clear `assignee`.
+- `in-progress → review`: required when `requiresHumanReview: true`. Keep `assignee`. Agent must **stop**.
+- `review → done`: human only. Clear `assignee`.
+- Any active → `block`: set when externally blocked. `assignee` preserved.
+- `block → in-progress`: when unblocked. `block → open`: when releasing claim (clear `assignee`).
 - Reject invalid transitions and explain why.
 
-### B3. Write changes (manifest first)
+### B3. Write changes (task file only)
 
-1. Update the task entry in `manifest.json`. Set `updatedAt` to now.
-2. Update the task file's YAML metadata block to match.
-3. If moving to `done`, check all acceptance criteria boxes (`- [ ]` → `- [x]`).
+1. Update the task file's YAML metadata block to match the new status (and `assignee` if starting or releasing).
+2. If moving to `done`, check all acceptance criteria boxes (`- [ ]` → `- [x]`).
+3. When setting `status: block`, create or append to the task's `-feedback.md` file (what was tried, why blocked, what would unblock). When releasing because stuck, append to `-feedback.md` before setting status to open.
 
 ### B4. Handle item completion
 
-If all tasks in the item now have `s: done`:
+If all tasks in the item now have `status: done`:
 
 1. Inform the user that all tasks in the item are complete.
 2. Ask if they want to archive the item.
@@ -387,17 +292,16 @@ If all tasks in the item now have `s: done`:
 
 ### C1. Identify the target
 
-Read `manifest.json` to locate the item or task.
+List `work/` and item directories; read `index.md` or task files to locate the item or task.
 
 ### C2. Present current content
 
 Show the current content and ask the user what they want to change.
 
-### C3. Apply edits (manifest first)
+### C3. Apply edits (single file only)
 
-1. Update `manifest.json` (e.g. `t` if title changed, `p`, `dep`, `h`). Set `updatedAt`.
-2. Edit the task file with the requested changes.
-3. If editing a task's name/slug, update the item's `index.md` link to keep it in sync.
+1. **Task edits:** Edit only the task file (metadata, description, acceptance criteria). If renaming task/slug, the task filename can be updated (move file) and any `dep` references in other task files that point to it must be updated.
+2. **Item edits:** Edit only that item's `index.md` (metadata `task`/`status`, description, CONTEXT). No task list to sync.
 
 ### C4. Confirm changes
 
@@ -409,37 +313,35 @@ Show the user a summary of what was changed.
 
 ### D1. Validate
 
-- Read `manifest.json` and verify **all tasks in the item have `s: done`**.
+- List task files in the item directory and read each task file's metadata. Verify **all tasks in the item have `status: done`**.
 - If any tasks are not `done`, inform the user and refuse to archive.
 
-### D2. Execute archive (strict order)
+### D2. Execute archive (single step)
 
-1. **Move** the item folder from `.backlogmd/work/<item-id>-<slug>/` to `.backlogmd/.archive/<YYYY>/<MM>/<item-id>-<slug>/` (create year/month directories if needed).
-2. **Remove** the item entry from `.backlogmd/backlog.md`.
-3. **Update** `manifest.json`: set item `status: "archived"`, decrement `openItemCount`, set `updatedAt`. Keep the item entry for history.
+1. **Move** the item folder from `.backlogmd/work/<item-id>-<slug>/` to `.backlogmd/.archive/<YYYY>/<MM>/<item-id>-<slug>/` (create year/month directories if needed). This includes `index.md`, all task files, and any `-feedback.md` files.
 
 ### D3. Confirm
 
-Report to the user that the item has been archived and how many open item slots remain.
+Report to the user that the item has been archived and how many open item directories remain in `work/` (out of 50).
 
 ---
 
 ## Operation E: Show backlog status
 
-### E1. Read manifest
+### E1. Read state from directory and files
 
-Read `manifest.json` for the full index. Cross-check with `backlog.md` if needed.
+List `.backlogmd/work/`; for each item directory read `index.md` (item title, item `status`) and list task files, then read each task file's metadata for task title and `status`.
 
 ### E2. Present a summary
 
 Show:
 
-- Total open items and their types
-- For each item: task breakdown by status (e.g. "3/5 tasks done, 1 ip, 1 open")
-- Any tasks currently `ip` or `reserved` (and their assignees)
+- Total open items (directories in `work/`) and item `status` where relevant
+- For each item: task breakdown by status (e.g. "3/5 tasks done, 1 in-progress, 1 open")
+- Any tasks currently `in-progress` (and their assignees)
 - Any tasks in `review` awaiting human approval
 - Items ready to archive (all tasks `done`)
-- Open item slots remaining (out of 50)
+- Open item count (directories in `work/`) and limit (50)
 
 ---
 
@@ -449,63 +351,44 @@ Validate that the entire `.backlogmd/` system is consistent. Read all files and 
 
 ### F1. Read all state
 
-- Read `manifest.json`.
-- Read `backlog.md`.
-- Scan `work/` and read every `index.md` and task file.
-- If `.archive/` exists, scan it too (read-only check).
+- List `.backlogmd/work/` and for each item directory read `index.md` and list task files (`<tid>-<task-slug>.md`), then read each task file.
+- If `.archive/` exists, list it (read-only check).
 
 ### F2. Validate structure
 
-- [ ] `backlog.md` exists.
-- [ ] `manifest.json` exists and is valid JSON.
-- [ ] `manifest.json` `specVersion` is `"3.0.1"`.
-- [ ] Every item in `backlog.md` has a corresponding folder in `work/`.
-- [ ] Every item folder has an `index.md`.
-- [ ] Every task file referenced in an item's `index.md` exists.
-- [ ] No orphan task files (files in an item folder that aren't listed in `index.md`).
-- [ ] No more than 50 open items (`openItemCount <= 50`).
+- [ ] `work/` exists. No requirement for `backlog.md` or `manifest.json`.
+- [ ] Every item folder under `work/` has an `index.md`.
+- [ ] Task files are named `<tid>-<task-slug>.md` (zero-padded tid, kebab-case slug).
+- [ ] No more than 50 directories in `work/`.
 
 ### F3. Validate formats
 
-- [ ] Every `backlog.md` entry follows `- [<item-id>-<slug>](work/<item-id>-<slug>/index.md)`, sorted by `item-id` ascending.
-- [ ] Every `index.md` is a bullet list of task links sorted by `tid` ascending.
-- [ ] Every task file has `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, and `<!-- ACCEPTANCE -->` markers.
-- [ ] Every task has YAML metadata with required fields: `t`, `s`, `p`, `dep`, `a`, `h`, `expiresAt`.
-- [ ] Task statuses are valid (`plan`, `open`, `reserved`, `ip`, `review`, `block`, `done`).
-- [ ] `dep` values are paths relative to `.backlogmd/`: `work/<item-id>-<slug>/<tid>-<task-slug>.md`; no self-references, no duplicates, no cycles (DAG across backlog).
+- [ ] Every `index.md` has `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, `<!-- CONTEXT -->` and YAML with at least `task` and `status`. Item `status` is one of `plan`, `open`, `in-progress`, `done`.
+- [ ] Every task file has `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, `<!-- ACCEPTANCE -->` and YAML with required fields: `task`, `status`, `priority`, `dep`, `assignee`, `requiresHumanReview`, `expiresAt`.
+- [ ] Task statuses are valid (`plan`, `open`, `in-progress`, `review`, `block`, `done`).
+- [ ] `dep` values are paths relative to `.backlogmd/`: `work/<item-id>-<slug>/<tid>-<task-slug>.md`; no self-references, no duplicates, no cycles (DAG).
 - [ ] Item IDs and task IDs are zero-padded (min 3 digits) and unique in their scope.
-- [ ] Slugs are lowercase kebab-case.
-- [ ] `reserved`, `ip`, `review` tasks have non-empty `a`. `done` tasks have empty `a`.
-- [ ] No YAML frontmatter outside the fenced code block.
+- [ ] `in-progress` and `review` tasks have non-empty `assignee`. `done` tasks have empty `assignee`.
 
-### F4. Validate manifest consistency
+### F4. Validate dependencies and workflow
 
-- [ ] Every item in `manifest.json` with `status: "open"` has a folder in `work/`.
-- [ ] Every task in manifest matches its task file for `s`, `a`, `p`, `dep`, `h`, `expiresAt`.
-- [ ] `openItemCount` matches the actual count of non-archived items.
-- [ ] Manifest `t` matches the task file's `t` field.
+- [ ] No circular dependencies (all `dep` paths form a DAG).
+- [ ] No task is `in-progress` while any of its `dep` (resolved by path to that task file) is not `done`.
+- [ ] No task with `requiresHumanReview: true` is `done` without having gone through `review`.
 
-### F5. Validate dependencies and workflow
+### F5. Validate archive
 
-- [ ] No circular dependencies across the backlog (all `dep` paths form a DAG).
-- [ ] No task is `ip` while any of its `dep` (resolved by path to manifest task) is not `done`.
-- [ ] No task with `h: true` has transitioned directly from `ip` to `done` (should go through `review`).
+- [ ] No item folder in `.archive/` is also present in `work/`.
 
-### F6. Validate archive
-
-- [ ] Archived item folders in `.archive/` are not also present in `work/`.
-- [ ] `backlog.md` does not reference archived items.
-- [ ] Archived items in manifest have `status: "archived"`.
-
-### F7. Report
+### F6. Report
 
 Present results as:
 
-- **Errors** — spec violations that must be fixed (missing files, broken links, invalid statuses, manifest mismatches).
-- **Warnings** — potential issues (items with all tasks done but not archived, stale `expiresAt`).
+- **Errors** — spec violations (missing markers, invalid statuses, broken `dep` paths, cycles).
+- **Warnings** — items with all tasks done but not archived, stale `expiresAt`.
 - **OK** — checks that passed.
 
-If errors are found, offer to fix them automatically (with user confirmation before writing). For manifest/file mismatches, follow reconciliation rules (manifest wins for status/assignment, task file wins for content).
+If errors are found, offer to fix them (with user confirmation). Task file is source of truth for task state; no manifest to reconcile.
 
 ---
 
@@ -513,10 +396,10 @@ If errors are found, offer to fix them automatically (with user confirmation bef
 
 - Follow the spec formats exactly — YAML metadata in fenced code blocks, no YAML frontmatter.
 - All paths are relative within `.backlogmd/`.
-- **Always update `manifest.json` first**, then task files, then `index.md`.
-- Never overwrite existing items or tasks — only append (for creation) or edit in place (for updates).
+- **Task edits:** write only the task file. **Item edits:** write only that item's `index.md`. **Feedback:** write only the task's `-feedback.md`. Never update a shared manifest or backlog file.
+- Never overwrite existing items or tasks — only create new item dirs/task files or edit in place.
 - Always confirm with the user before writing or modifying files.
-- Max 50 open items in `work/`. If the limit is reached, the user must archive an item or use an existing one.
+- Max 50 open items (directories in `work/`). If the limit is reached, the user must archive an item or use an existing one.
 - The `.archive/` directory is cold storage. After moving items into it, never modify them again.
 - A completed task cannot be reopened. If the work needs revisiting, create a new task instead.
-- When `h: true`, agents MUST NOT move a task directly from `ip` to `done` — it must go through `review`.
+- When `requiresHumanReview: true`, agents MUST NOT move a task directly from `in-progress` to `done` — it must go through `review`.

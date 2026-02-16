@@ -4,6 +4,60 @@
 
 ---
 
+## 4.0.2
+
+- **Summary:** Removed the claim step. Tasks go directly from `open` to `in-progress` when an agent starts work; the `reserved` status is removed.
+- **Breaking changes:**
+  - **Task status `reserved` removed** — No longer a valid status. Flow is now `plan → open → in-progress → done` (or `→ review → done`).
+- **Changed:**
+  - **Starting work:** Agent sets `status: in-progress`, `assignee`, and optionally `expiresAt` in one step (no separate "claim" with `reserved`).
+  - **Expiry:** Another agent may "take over" by setting `status: in-progress` and a new `assignee` (no `reserved`).
+  - **Protocol section** renamed from "Claim & Human-in-the-Loop Protocol" to "Human-in-the-Loop Protocol". Subsections "Claiming a task" and "Starting work" merged into "Starting work"; "Releasing a claim" renamed to "Releasing".
+  - **Status flow diagram:** `open → in-progress` (no `reserved` in between). `block` reachable from `in-progress` or `review` only.
+- **Migration (4.0.1 → 4.0.2):** Any task with `status: reserved` should be treated as `in-progress` (or move to `open` if the assignee released). Update task files to use only the remaining statuses.
+
+---
+
+## 4.0.1
+
+- **Summary:** Item `index.md` no longer contains a task list. It now has metadata (YAML), an optional description, and a `<!-- CONTEXT -->` section for agents. Tasks are discovered by listing the item directory for `<tid>-<task-slug>.md` files. Metadata keys use full names (no shorthand).
+- **Breaking changes:**
+  - **Item Format** — `work/<item-id>-<slug>/index.md` is no longer a bullet list of task links. It has three sections: `<!-- METADATA -->` (YAML, e.g. item title `task`), `<!-- DESCRIPTION -->`, and `<!-- CONTEXT -->`. The CONTEXT block is read and used by agents when working on any task in that item.
+  - **Metadata keys** — Task and item METADATA use full key names: `task` (was `t`), `status` (was `s` for tasks), `priority` (was `p`), `assignee` (was `a`), `requiresHumanReview` (was `h`).
+- **Changed:**
+  - **Task discovery** — Agents discover tasks by listing each item directory for files matching `<tid>-<task-slug>.md` (excluding `index.md`).
+  - **Write ordering** — Task edits touch only the task file. Item-level edits (metadata, description, CONTEXT) touch only `index.md`. No link list to keep in sync.
+  - **Claiming** — Agent SHOULD read the item's `index.md` (especially `<!-- CONTEXT -->`) when working on a task in that item.
+  - **Reconciliation** — No task list in `index.md`; nothing to regenerate.
+  - **Conventions** — Replaced "index.md must stay in sync with task files" with "task files are discovered by listing the item directory for `<tid>-<task-slug>.md`".
+- **Migration (4.0.0 → 4.0.1):** Convert each existing `index.md` from a task-link list to the new structure (METADATA with at least `task: <item title>`, optional DESCRIPTION, CONTEXT). In task files and index METADATA, rename keys: `t` → `task`, `s` → `status`, `p` → `priority`, `a` → `assignee`, `h` → `requiresHumanReview`. Populate CONTEXT as needed for agents. Task discovery will be by directory listing from 4.0.1 onward.
+
+---
+
+## 4.0.0
+
+- **Summary:** Removed `manifest.json` and `backlog.md` from the spec. Shared files that multiple agents write to cause merge conflicts; the system uses only directory structure and per-item task files. Open items are directories under `work/`; agents discover work by listing `work/` and reading task files.
+- **Breaking changes:**
+  - **`manifest.json` removed** — No longer part of directory structure. Agents must not read or write a manifest. All status, assignment, and content are read from and written to task files only.
+  - **`backlog.md` removed** — No longer part of directory structure. Agents must not read or write a backlog file. Open items are the directories under `work/`.
+  - **Write ordering** — Was manifest → task → index. Now: task file first, then `index.md` if affected.
+  - **Claiming / starting work** — Agents list `work/` and read task files to find tasks with `s: open`. Dependency resolution is done by reading the task file at each `dep` path (no manifest lookup).
+  - **Archive** — Procedure is a single step: move the item folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/`. No shared file to update.
+  - **Reconciliation** — Source of truth is task files and directory structure only. Only `index.md` may need repair: regenerate from task files on disk if links are missing or stale.
+  - **Versioning** — Spec version is only in `SPEC.md`. Removed "Agents may reject if `specVersion` in `manifest.json` is unsupported"; replaced with "Agents may reject if the spec version in this file is unsupported."
+- **Removed:**
+  - Entire **Manifest (`manifest.json`)** section (schema, field notes).
+  - Entire **Backlog Format (`backlog.md`)** section (format, example).
+  - All references to manifest and `backlog.md` in Claim protocol, Archive, Limits, Workflow rules, and Reconciliation.
+- **Added:**
+  - **Open items** — Short section stating that open items = directories under `work/`, archived = under `.archive/`, and discovery is by listing `work/` and reading task files.
+- **Changed:**
+  - **Limits:** "Max 50 open items" = max 50 directories in `work/`.
+  - **Reconciliation:** Describes only `index.md` repair from task files on disk; no shared backlog file.
+- **Migration (3.x → 4.0.0):** Remove `manifest.json` and `backlog.md` from `.backlogmd/` if present. Ensure all task metadata is correct in task files; agents use only directory structure and per-item files from 4.0.0 onward.
+
+---
+
 ## 3.0.1
 
 - **Summary:** Clarified and standardized task dependency format. Dependencies are now explicit work/task paths so agents know exactly which item and task must be done before starting.

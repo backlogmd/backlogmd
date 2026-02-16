@@ -1,6 +1,6 @@
 # Specification
 
-**Version:** 3.0.1
+**Version:** 4.0.2
 
 Single source of truth for the `.backlogmd/` system — markdown-based agile/kanban for agentic development. Agents must read this file before interacting with the backlog.
 
@@ -8,12 +8,11 @@ Single source of truth for the `.backlogmd/` system — markdown-based agile/kan
 
 ```
 .backlogmd/
-├── backlog.md
-├── manifest.json
 ├── work/
 │   ├── <item-id>-<slug>/
 │   │   ├── index.md
 │   │   ├── 001-task-slug.md
+│   │   ├── 001-task-slug-feedback.md   # optional, agent feedback when stuck
 │   │   ├── 002-task-slug.md
 │   │   └── ...
 │   └── ...
@@ -23,38 +22,55 @@ Single source of truth for the `.backlogmd/` system — markdown-based agile/kan
 
 All paths in this document and throughout the system are relative within `.backlogmd/`.
 
+## Open items
+
+- **Open items** are the directories under `work/`. Agents discover work by listing `work/`, then for each item directory reading `index.md` (metadata, including item `status`, and `<!-- CONTEXT -->`) and listing task files (filenames matching `<tid>-<task-slug>.md`). Items with `status: plan` are not ready for agents; items with `status: open` may have tasks ready to start.
+- **Archived items** are under `.archive/`; agents skip them for active work.
+- When every task in an item has `status: done`, archive the item by moving its folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/`.
+
 ## IDs and Naming
 
 - **Item IDs** (`item-id`): Zero-padded integers, minimum 3 digits (e.g., `001`, `012`, `999`, `1000`). Unique across the backlog.
 - **Task IDs** (`tid`): Zero-padded integers, minimum 3 digits. Unique per item.
 - **Slugs**: Lowercase kebab-case. An optional Conventional Commit type may follow the ID as the first slug segment (e.g., `001-chore-project-foundation`).
-- **Priority** (`p`): Integer, unique per item. **Lower number = higher priority.**
-
-## Backlog Format (`backlog.md`)
-
-- Bullet list of markdown links to each item's `index.md`, sorted by `item-id` ascending.
-- Format: `- [<item-id>-<slug>](work/<item-id>-<slug>/index.md)`
-- Completed items are removed from `backlog.md` and their folder is moved to `.archive/`.
-
-### Example
-
-```md
-- [001-chore-project-foundation](work/001-chore-project-foundation/index.md)
-- [002-ci-initialize-github-actions](work/002-ci-initialize-github-actions/index.md)
-```
+- **Priority** (`priority`): Integer, unique per item. **Lower number = higher priority.**
 
 ## Item Format (`work/<item-id>-<slug>/index.md`)
 
-- Bullet list of relative links to task files within the same directory.
-- Sorted by task id (`tid`) ascending.
-- Format: `- [<tid>-<task-slug>](<tid>-<task-slug>.md)`
+- Item-level metadata, description, and a **CONTEXT** section for agents. It does **not** list tasks. Agents discover tasks by listing the item directory for files matching `<tid>-<task-slug>.md` (excluding `index.md`).
+- Three HTML comment markers: `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, `<!-- CONTEXT -->`. The **CONTEXT** block is read and used by agents when working on any task in this item (e.g. repo conventions, pointers to docs, environment notes).
 
-### Example
+### Structure
 
-```md
-- [001-setup-repo](001-setup-repo.md)
-- [002-init-ci](002-init-ci.md)
+````md
+<!-- METADATA -->
+
+```yaml
+task: Add login flow # item title
+status: open # plan | open | in-progress | done
 ```
+
+<!-- DESCRIPTION -->
+
+<optional item description>
+
+<!-- CONTEXT -->
+
+<context for agents: conventions, links, env notes, etc.>
+````
+
+### Item status
+
+- **`status`**: Item-level lifecycle, distinct from task `status`. Values:
+  - **`plan`** — Grooming/draft; not ready for agents to work on.
+  - **`open`** — Ready for agents to start tasks in this item.
+  - **`in-progress`** — At least one task in the item is being worked on.
+  - **`done`** — Every task in the item has `status: done`; item is ready to archive (or already considered complete).
+
+### Rules
+
+- Metadata is YAML in the fenced block; keep metadata lines ≤ 120 chars. No YAML frontmatter outside it.
+- **CONTEXT** may be empty; agents should still read `index.md` when picking up a task in the item so they see any context that is present.
 
 ## Task Format (`work/<item-id>-<slug>/<tid>-<task-slug>.md`)
 
@@ -62,12 +78,12 @@ All paths in this document and throughout the system are relative within `.backl
 <!-- METADATA -->
 
 ```yaml
-t: Add login form
-s: plan # plan | open | reserved | ip | review | block | done
-p: 10 # priority within item (lower = higher priority)
+task: Add login form
+status: plan # plan | open | in-progress | review | block | done
+priority: 10 # priority within item (lower = higher priority)
 dep: ["work/002-ci-initialize-github-actions/001-ci-cd-setup.md"] # optional: paths (relative to .backlogmd/) to tasks that must be done before this task can start
-a: "" # assignee/agent id; empty string if unassigned
-h: false # true if human review required before done
+assignee: "" # assignee/agent id; empty string if unassigned
+requiresHumanReview: false # true if human review required before done
 expiresAt: null # ISO 8601 timestamp for reservation expiry, or null
 ```
 
@@ -86,176 +102,104 @@ expiresAt: null # ISO 8601 timestamp for reservation expiry, or null
 
 ### Dependencies
 
-- **`dep`** lists paths to **other tasks** that must be **done** before this task can move to `ip`. Each entry is a path relative to `.backlogmd/`: `work/<item-id>-<slug>/<tid>-<task-slug>.md` (e.g. `work/002-ci-initialize-github-actions/001-ci-cd-setup.md`). Dependencies may be in the same item or in another item (cross-item). Agents must wait for each referenced work/task to be complete (`s: done`) before starting this task.
+- **`dep`** lists paths to **other tasks** that must be **done** before this task can move to `in-progress`. Each entry is a path relative to `.backlogmd/`: `work/<item-id>-<slug>/<tid>-<task-slug>.md` (e.g. `work/002-ci-initialize-github-actions/001-ci-cd-setup.md`). Dependencies may be in the same item or in another item (cross-item). Agents must wait for each referenced work/task to be complete (`status: done`) before starting this task.
 
 ### Rules
 
-- Filenames: `<tid>-<task-slug>.md`; `tid` zero-padded, unique per item.
+- Filenames: `<tid>-<task-slug>.md`; `tid` zero-padded, unique per item. The only required file for a task is the task file itself. A task may have an optional sibling **feedback file** `<tid>-<task-slug>-feedback.md` (see **Blocking** and **Releasing**).
 - Status codes:
   - `plan` — groomed/draft, not ready for agents to pick up.
-  - `open` — ready to be claimed by an agent.
-  - `reserved` — claimed, awaiting start. Requires `a` (non-empty).
-  - `ip` — in progress. Requires `a` (non-empty).
-  - `review` — awaiting human approval. Set when `h: true` and work is complete. Requires `a`.
-  - `block` — blocked by an external dependency. `a` is preserved.
-  - `done` — complete. `a` is cleared.
+  - `open` — ready for an agent to start work.
+  - `in-progress` — being worked on. Requires `assignee` (non-empty).
+  - `review` — awaiting human approval. Set when `requiresHumanReview: true` and work is complete. Requires `assignee`.
+  - `block` — blocked by an external dependency. `assignee` is preserved.
+  - `done` — complete. `assignee` is cleared.
 - **`dep`**: See **Dependencies** above. No self-reference; no duplicates; no cycles (backlog must remain a DAG).
 - Three HTML comment markers only: `<!-- METADATA -->`, `<!-- DESCRIPTION -->`, `<!-- ACCEPTANCE -->`.
 - Acceptance criteria use markdown checkboxes.
-- No YAML frontmatter outside the fenced block; keep metadata lines ≤ 120 chars.
+- No YAML frontmatter outside the fenced code block; keep metadata lines ≤ 120 chars.
 
-## Manifest (`manifest.json`)
-
-Machine-readable index. Agents MUST read the manifest before acting and MUST update it alongside every file edit. The file is **strict JSON** (no trailing commas, no comments). Examples in this spec use JSONC for readability only.
-
-### Schema (conceptual)
-
-```jsonc
-{
-  "specVersion": "3.0.1",
-  "updatedAt": "2026-02-13T12:00:00Z", // set on every manifest write
-  "openItemCount": 1,
-  "items": [
-    {
-      "id": "001",
-      "slug": "chore-project-foundation",
-      "path": "work/001-chore-project-foundation",
-      "status": "open", // open | archived
-      "updated": "2026-02-13T11:59:00Z",
-      "tasks": [
-        {
-          "tid": "001",
-          "slug": "setup-repo",
-          "file": "001-setup-repo.md",
-          "t": "Set up repository structure",
-          "s": "done",
-          "p": 5,
-          "dep": []
-          "a": "",
-          "h": false,
-          "expiresAt": null,
-        },
-        {
-          "tid": "002",
-          "slug": "init-ci",
-          "file": "002-init-ci.md",
-          "t": "Initialize CI pipeline",
-          "s": "reserved",
-          "p": 10,
-          "dep": ["work/001-chore-project-foundation/001-setup-repo.md"],
-          "a": "alice",
-          "h": true,
-          "expiresAt": "2026-02-13T15:00:00Z",
-        },
-      ],
-    },
-  ],
-}
-```
-
-### Field notes
-
-- Item `status` (`open | archived`) is distinct from task `s` — they track different lifecycles.
-- Each task entry includes `slug` and `file` so agents can resolve paths without reading `index.md`. Task `dep` in the manifest uses the same path format as in task files: `work/<item-id>-<slug>/<tid>-<task-slug>.md` (relative to `.backlogmd/`); cross-item dependencies are allowed.
-- `t` (title) is included for quick lookups and dashboard views.
-- `updatedAt` at the root MUST be set to the current ISO 8601 timestamp (UTC, with trailing `Z`) on every manifest write.
-- `expiresAt` is `null` (not `""`) when unset, in both JSON and YAML.
-
-## Claim & Human-in-the-Loop Protocol
+## Human-in-the-Loop Protocol
 
 ### Write ordering
 
 File-based systems cannot provide true atomicity. To minimize inconsistency:
 
-- Manifest is the authoritative source for status/assignment; task files are authoritative for content. Write order is manifest → task → index.
+- Task files are the authoritative source for task status, assignment, and content. The item's `index.md` is the source for item metadata, description, and CONTEXT.
 
-1. **Write manifest first**, then the task file, then `index.md` (if affected).
-2. If a write fails midway, the manifest is treated as the **authoritative source for status and assignment**. Task file content (description, acceptance criteria) is authoritative for content.
-3. Agents encountering a mismatch between manifest and file should trust the manifest for `s`, `a`, `p`, `dep`, `h`, `expiresAt`, and update the task file to match.
-
-### Claiming a task
-
-1. Agent re-reads the manifest. If the task `s` is `open`, the agent sets `s: reserved`, `a: <agent-id>`, and optionally `expiresAt` (ISO 8601, short horizon — e.g., 30 min). Update manifest first, then task file.
-2. Only `open` tasks may be claimed. `plan` tasks must first be promoted to `open` by a human or authorized agent.
-3. `plan` cannot transition directly to `reserved`; it must go through `open` before claiming.
+1. **Task edits:** write only the task file.
+2. **Item-level edits** (item metadata, description, or CONTEXT): write only `index.md`.
+3. **Task feedback:** when recording feedback (e.g. when stuck or blocking), create or append to the task's `-feedback.md` file only; path is `work/<item-id>-<slug>/<tid>-<task-slug>-feedback.md`.
+4. There is no task list in `index.md`; nothing to regenerate from task files.
 
 ### Starting work
 
-4. Set `s: ip` (keep `a`). A task cannot move to `ip` until **every** dependency in its `dep` list is done: each `dep` entry is a path `work/<item-id>-<slug>/<tid>-<task-slug>.md`; resolve that path to the corresponding task in the manifest and require `s === "done"` for each. Agents block on the full work/task (each referenced task) being done before starting.
+1. Agent lists directories under `work/`, then per item lists task files (`<tid>-<task-slug>.md`) and reads their metadata to find tasks with `status: open`. When working on a task, the agent SHOULD read that item's `index.md` (especially `<!-- CONTEXT -->`) and, if present, the task's feedback file `<tid>-<task-slug>-feedback.md` (so previous attempts or blockers are visible).
+2. To start work on an `open` task: set `status: in-progress`, `assignee: <agent-id>`, and optionally `expiresAt` (ISO 8601, short horizon — e.g., 30 min). A task cannot move to `in-progress` until **every** dependency in its `dep` list is done: each `dep` entry is a path `work/<item-id>-<slug>/<tid>-<task-slug>.md`; read that task file and require `status === "done"` for each. Update only the task file.
+3. Only `open` tasks may be started. `plan` tasks must first be promoted to `open` by a human or authorized agent.
 
 ### Completing work
 
-5. If `h: false`: set `s: done` and clear `a`.
-6. If `h: true`: agent MUST set `s: review` and **stop**. Direct `ip → done` is **invalid** when `h: true`. Only a human (or authorized role) may move `review → done`.
+4. If `requiresHumanReview: false`: set `status: done` and clear `assignee`.
+5. If `requiresHumanReview: true`: agent MUST set `status: review` and **stop**. Direct `in-progress → done` is **invalid** when `requiresHumanReview: true`. Only a human (or authorized role) may move `review → done`.
 
-### Releasing a claim
+### Releasing
 
-7. To unclaim, set `s: open` and clear `a` and `expiresAt`.
+6. To stop working on a task without completing it, set `status: open` and clear `assignee` and `expiresAt`. If the agent is stuck (e.g. giving up without completing), the agent SHOULD append to the task's `-feedback.md` file first with a short note (what was tried, why stuck) so the next agent or human has context.
 
 ### Expiry
 
-8. If `expiresAt` is non-null and in the past, another agent may reclaim by setting `s: reserved`, overwriting `a` with its own ID, and setting a fresh `expiresAt`.
-9. `expiresAt` applies only in `reserved` and `ip`; ignore it while a task is in `review`.
+7. If `expiresAt` is non-null and in the past, another agent may take over by setting `status: in-progress`, overwriting `assignee` with its own ID, and setting a fresh `expiresAt`.
+8. `expiresAt` applies only in `in-progress`; ignore it while a task is in `review`.
 
 ### Blocking
 
-8. Set `s: block` when an external dependency prevents progress. `a` remains set. Valid transitions out of `block`: back to `ip` (when unblocked) or to `open` (if releasing the claim).
+9. Set `status: block` when an external dependency prevents progress. `assignee` remains set. When setting `status: block`, the agent MUST create or append to the task's `-feedback.md` file (path: `work/<item-id>-<slug>/<tid>-<task-slug>-feedback.md`) with: what was tried, why progress is blocked, and optionally what would unblock (e.g. "wait for PR merge", "need API key"). Valid transitions out of `block`: back to `in-progress` (when unblocked) or to `open` (if releasing).
 
 ## Archive
 
 - Cold storage; agents skip `.archive/`.
-- An item is archived **only when every task in the item has `s: done`**.
-- Archive procedure (execute in order):
-  1. Move the item folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/`.
-  2. Remove the item's entry from `backlog.md`.
-  3. Set item `status: "archived"` in `manifest.json` (keep the item entry for history; task list may be trimmed).
-- Archived item entries remain in the manifest for history; `openItemCount` excludes items with `status: "archived"`. Task lists in archived items may be trimmed as needed. Archive contents are read-only.
+- An item is archived **only when every task in the item has `status: done`**.
+- Archive procedure: move the item folder to `.archive/<YYYY>/<MM>/<item-id>-<slug>/` (including any `-feedback.md` files). There is no shared file to update; the directory structure is the source of truth.
 
 ## Limits
 
-- Max 50 open items (`openItemCount <= 50`).
+- Max 50 open items (max 50 directories in `work/`).
 - Recommended max 20 tasks per item. Items with more should be split into a new item.
-- Archival steps must be executed in the prescribed order (folder move → backlog removal → manifest update).
 
 ## Workflow Rules
 
 ### Status flow
 
 ```
-plan ──→ open ──→ reserved ──→ ip ──→ done           (h: false)
-                                  ──→ review ──→ done (h: true)
+plan ──→ open ──→ in-progress ──→ done           (requiresHumanReview: false)
+                            ──→ review ──→ done (requiresHumanReview: true)
 
-Any active state ──→ block ──→ ip or open
+Any active state ──→ block ──→ in-progress or open
 ```
 
 - `plan → open`: promotion (human or authorized agent only).
-- `open → reserved`: claim (any agent).
-- `reserved → ip`: start work (assigned agent).
-- `ip → done`: completion (only valid when `h: false`).
-- `ip → review → done`: completion with human gate (required when `h: true`).
-- `block`: reachable from `reserved`, `ip`, or `review`. Returns to `ip` (unblocked) or `open` (released).
-- A task cannot move to `ip` until every referenced task in `dep` (by path `work/.../<tid>-<task-slug>.md`) has `s: done`. Agents wait for each dependency (that work/task) to be fully done before starting.
+- `open → in-progress`: start work (any agent); set `assignee` and optionally `expiresAt`.
+- `in-progress → done`: completion (only valid when `requiresHumanReview: false`).
+- `in-progress → review → done`: completion with human gate (required when `requiresHumanReview: true`).
+- `block`: reachable from `in-progress` or `review`. Returns to `in-progress` (unblocked) or `open` (released).
+- A task cannot move to `in-progress` until every referenced task in `dep` (by path `work/.../<tid>-<task-slug>.md`) has `status: done`. Agents wait for each dependency (that work/task) to be fully done before starting.
 - No circular dependencies. The set of all tasks and their `dep` paths must form a DAG. Agents adding `dep` entries must verify no cycle is introduced across the backlog.
-- Task edits must update both the task file and manifest (manifest first).
+- Task edits update only the task file. Task feedback updates only the task's `-feedback.md` file when present. Item-level edits (metadata, description, CONTEXT) update the item's `index.md`.
 - When all tasks in an item are `done`, archive the item.
 
 ## Reconciliation
 
-If the manifest and task files disagree:
+Task files and directory structure are the source of truth. There is no shared backlog file. `index.md` does not contain a task list; tasks are discovered by listing the item directory for `<tid>-<task-slug>.md` files.
 
-- **Status/assignment fields** (`s`, `a`, `p`, `dep`, `h`, `expiresAt`): manifest wins. Update the task file to match.
-- If a task is `done`, `a` MUST be empty in both manifest and task file; clear it during reconciliation.
-- **Content fields** (description, acceptance criteria): task file wins. Update the manifest `t` if the title changed in the file.
-- **`index.md` link list**: regenerate from the task files present on disk, sorted by `tid`.
-- If `index.md` is missing links for existing tasks, regenerate; if it has links to missing files, remove them
-
-Agents should reconcile on read if a mismatch is detected, and log a warning.
+- If a task is `done`, `assignee` MUST be empty in the task file; clear it during any repair.
+- No link list to regenerate in `index.md`.
 
 ## Conventions
 
 - All paths are relative within `.backlogmd/`.
 - Priority numbers are unique per item (lower = higher priority).
-- `index.md` must stay in sync with task files on disk.
+- Task files are discovered by listing the item directory for files named `<tid>-<task-slug>.md` (excluding `index.md` and any `-feedback.md` files).
 - No YAML frontmatter outside the fenced code block.
 - Keep metadata lines ≤ 120 chars.
 - Avoid inline HTML outside the three comment markers.
@@ -263,6 +207,6 @@ Agents should reconcile on read if a mismatch is detected, and log a warning.
 ## Versioning
 
 - Semantic Versioning (`MAJOR.MINOR.PATCH`).
-- This file is 3.0.1. Prior specs live in `specs/`.
+- This file is 4.0.2. Prior specs live in `specs/`.
 - See `SPEC-CHANGELOG.md` for history and migrations.
-- Agents may reject if `specVersion` in `manifest.json` is unsupported.
+- Agents may reject if the spec version in this file is unsupported.

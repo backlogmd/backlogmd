@@ -1,12 +1,12 @@
 <!-- METADATA -->
 
 ```yaml
-t: Install Next.js, React and Tailwind
-s: open
-p: 1
+task: Install Next.js, React and Tailwind
+status: open
+priority: 1
 dep: []
-a: ""
-h: false
+assignee: ""
+requiresHumanReview: false
 expiresAt: null
 ```
 

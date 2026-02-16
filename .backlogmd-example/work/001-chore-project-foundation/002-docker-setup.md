@@ -1,12 +1,12 @@
 <!-- METADATA -->
 
 ```yaml
-t: Docker setup
-s: open
-p: 2
-dep: ["001"]
-a: ""
-h: false
+task: Docker setup
+status: open
+priority: 2
+dep: ["work/001-chore-project-foundation/001-install-next-react-tailwind.md"]
+assignee: ""
+requiresHumanReview: false
 expiresAt: null
 ```
 

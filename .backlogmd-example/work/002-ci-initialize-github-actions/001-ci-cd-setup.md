@@ -1,12 +1,12 @@
 <!-- METADATA -->
 
 ```yaml
-t: CI/CD setup
-s: open
-p: 1
+task: CI/CD setup
+status: open
+priority: 1
 dep: []
-a: ""
-h: false
+assignee: ""
+requiresHumanReview: false
 expiresAt: null
 ```
 
